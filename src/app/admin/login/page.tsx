@@ -23,41 +23,77 @@ export default function AdminLoginPage() {
 
     try {
       // 1. Authenticate with Supabase Auth
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password,
       });
 
-      if (error) {
-        setErrorMsg(error.message);
+      if (authError) {
+        setErrorMsg(authError.message);
         setIsLoading(false);
         return;
       }
 
       if (!data?.user) {
-        setErrorMsg("Failed to authenticate admin credentials.");
+        setErrorMsg("Failed to authenticate administrator credentials.");
         setIsLoading(false);
         return;
       }
 
-      // 2. Strict Database Role Verification (Does not rely on client-side email matching)
-      const { data: profile } = await supabase
+      // 2. Strict Database Role Verification with Explicit Error Capture
+      const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role, is_blocked")
         .eq("id", data.user.id)
         .single();
 
-      const hasAdminRole = profile?.role === "admin" && !profile?.is_blocked;
+      if (profileError) {
+        // Log complete PostgREST error details for diagnostic inspection
+        console.error("Supabase Admin Role Verification Error:", {
+          code: profileError.code,
+          message: profileError.message,
+          details: profileError.details,
+          hint: profileError.hint,
+        });
 
-      if (!hasAdminRole) {
-        // Sign out immediately — unauthorized access attempt
+        const errorDetails = [
+          `Code: ${profileError.code || "UNKNOWN"}`,
+          `Message: ${profileError.message}`,
+          profileError.details ? `Details: ${profileError.details}` : null,
+          profileError.hint ? `Hint: ${profileError.hint}` : null,
+        ]
+          .filter(Boolean)
+          .join(" | ");
+
+        setErrorMsg(`DATABASE ERROR: ${errorDetails}`);
+        await supabase.auth.signOut();
+        setIsLoading(false);
+        return;
+      }
+
+      if (!profile) {
+        await supabase.auth.signOut();
+        setErrorMsg("ACCOUNT INCOMPLETE: Profile record returned empty data.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 3. Authorization Verification
+      if (profile.is_blocked) {
+        await supabase.auth.signOut();
+        setErrorMsg("ACCESS SUSPENDED: This administrator account has been disabled.");
+        setIsLoading(false);
+        return;
+      }
+
+      if (profile.role !== "admin") {
         await supabase.auth.signOut();
         setErrorMsg("ACCESS DENIED: Your account does not have Master Administrator privileges.");
         setIsLoading(false);
         return;
       }
 
-      // 3. Grant Access and Redirect to Admin Panel
+      // 4. Grant Access and Redirect to Admin Panel
       router.push("/admin");
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : "An unexpected authorization error occurred.");

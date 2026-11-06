@@ -177,11 +177,22 @@ export default function AdminDashboard() {
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "vsidd143@gmail.com";
         const isMaster = (user.email || "").toLowerCase() === adminEmail.toLowerCase();
 
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("role, is_blocked")
           .eq("id", user.id)
           .maybeSingle();
+
+        if (profileError) {
+          console.error("Admin dashboard profile query error:", profileError);
+          if (isMounted) {
+            setAuthStatus("unauthorized");
+            setUnauthorizedReason(
+              `Database Error (${profileError.code || "UNKNOWN"}): ${profileError.message}`
+            );
+          }
+          return;
+        }
 
         const hasAdminRole = profile?.role === "admin" && !profile?.is_blocked;
 
