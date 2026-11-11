@@ -62,10 +62,10 @@ export default function CartPage() {
               </p>
             </div>
             <Link
-              href="/collection"
+              href="/new-arrivals"
               className="inline-flex items-center gap-2 px-8 py-3.5 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-xs tracking-widest uppercase font-mono transition-all"
             >
-              <span>Explore Collection</span>
+              <span>Explore New Arrivals</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </motion.div>
@@ -158,7 +158,7 @@ export default function CartPage() {
 
               <div className="pt-4">
                 <Link
-                  href="/collection"
+                  href="/new-arrivals"
                   className="inline-flex items-center gap-2 text-xs font-mono text-neutral-400 hover:text-white transition-colors uppercase tracking-wider"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
@@ -236,6 +236,14 @@ export default function CartPage() {
                   <span>Proceed to Secure Checkout</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
+
+                {/* Continue Shopping */}
+                <Link
+                  href="/new-arrivals"
+                  className="block w-full py-2.5 text-center text-xs font-mono tracking-widest text-neutral-400 hover:text-white uppercase transition-colors"
+                >
+                  ← Continue Shopping
+                </Link>
 
                 {/* Trust Badges */}
                 <div className="space-y-2 text-[10px] font-mono text-neutral-500 pt-2 border-t border-white/10">

@@ -70,7 +70,7 @@ export function getDateRangeForPeriod(
   customEnd?: string
 ): AnalyticsDateRange {
   const now = new Date();
-  
+
   // Calculate current date in IST (UTC+5.5)
   const istOffset = 5.5 * 60 * 60 * 1000;
   const istNow = new Date(now.getTime() + istOffset);
@@ -342,7 +342,7 @@ export function calculateProfitBreakdown(
   // Gross Sales Revenue (Delivered only)
   const grossSalesRevenue = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
   const discountsTotal = deliveredOrders.reduce((sum, o) => sum + Number(o.discount_amount || 0), 0);
-  
+
   // Net sales
   const netSales = grossSalesRevenue;
 
@@ -856,7 +856,7 @@ export function generateBusinessAlerts(
     alerts.push({
       id: "low-stock",
       type: "warning",
-      title: `${lowStock.length} Silhouettes Running Low On Stock`,
+      title: `${lowStock.length} product Running Low On Stock`,
       description: `Limited inventory remaining for: ${lowStock.slice(0, 3).map((p) => p.name).join(", ")}${lowStock.length > 3 ? ` and ${lowStock.length - 3} others` : ""}.`,
       metric: `${lowStock.length} Low`,
       actionText: "Restock Runway",

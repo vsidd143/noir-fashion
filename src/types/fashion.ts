@@ -4,8 +4,13 @@ export type ProductCategory =
   | "jackets" 
   | "pants" 
   | "t-shirts" 
+  | "shirts"
+  | "dresses"
+  | "kurtis"
   | "footwear" 
-  | "accessories";
+  | "accessories"
+  | "apparel"
+  | (string & {});
 
 export type ProductColor = {
   name: string;
@@ -23,9 +28,13 @@ export type ProductHotspot = {
 
 export type Product = {
   id: string;
+  dbId?: string;
   name: string;
   subtitle: string;
   category: ProductCategory;
+  categoryId?: string;
+  productType?: string;
+  productTypeId?: string;
   price: number;
   originalPrice?: number;
   images: string[];
@@ -44,6 +53,13 @@ export type Product = {
   cost_price?: number;
   threeDType?: "hoodie" | "sneaker" | "jacket" | "mannequin";
   hotspots?: ProductHotspot[];
+  tags?: string[];
+  department?: "men" | "women" | "kids" | "new-arrivals" | "unisex";
+  gender?: "men" | "women" | "kids" | "unisex";
+  sku?: string;
+  brand?: string;
+  is_published?: boolean;
+  is_archived?: boolean;
   rating: number;
   reviewsCount: number;
 };

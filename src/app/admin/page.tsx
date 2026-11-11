@@ -19,6 +19,7 @@ import {
 import { exportOrdersToCSV, calculateCustomerStats } from "@/lib/csv-export";
 import { AnalyticsOrder } from "@/lib/analytics-engine";
 import SalesAnalyticsDashboard from "@/components/admin/SalesAnalyticsDashboard";
+import ProductManagementSection from "@/components/admin/ProductManagementSection";
 import CustomCursor from "@/components/ui/CustomCursor";
 import ToastContainer from "@/components/ui/ToastContainer";
 import {
@@ -251,6 +252,7 @@ export default function AdminDashboard() {
   const [newProdSubtitle, setNewProdSubtitle] = useState("");
   const [newProdDescription, setNewProdDescription] = useState("");
   const [newProdCategory, setNewProdCategory] = useState("hoodies");
+  const [newProdDepartment, setNewProdDepartment] = useState<"men" | "women" | "kids">("men");
   const [newProdType, setNewProdType] = useState("");
   const [newProdCollection, setNewProdCollection] = useState("");
   const [newProdPrice, setNewProdPrice] = useState<number>(7999);
@@ -315,7 +317,7 @@ export default function AdminDashboard() {
   );
   const [heroHeading, setHeroHeading] = useState("WEAR YOUR IDENTITY");
   const [heroSubheading, setHeroSubheading] = useState(
-    "Luxury modern streetwear designed in India. Handcrafted heavyweight cotton silhouettes."
+    "Luxury modern streetwear designed in India. Handcrafted heavyweight cotton product."
   );
 
   // Store Settings State
@@ -373,7 +375,7 @@ export default function AdminDashboard() {
         try {
           const storedColls = localStorage.getItem("noir_collections");
           if (storedColls) localColls = JSON.parse(storedColls);
-        } catch {}
+        } catch { }
       }
       if (remoteColls.length > 0) {
         const remoteIds = new Set(remoteColls.map((c) => c.id));
@@ -383,7 +385,7 @@ export default function AdminDashboard() {
         setCollectionsList(localColls);
       } else {
         setCollectionsList([
-          { id: "col-1", name: "Autumn-Winter Runway", slug: "runway-edition-07", description: "Our headline autumn collection featuring heavyweight silhouettes.", is_active: true, display_order: 1 },
+          { id: "col-1", name: "Autumn-Winter Runway", slug: "runway-edition-07", description: "Our headline autumn collection featuring heavyweight product.", is_active: true, display_order: 1 },
           { id: "col-2", name: "Essential Streetwear", slug: "essentials", description: "Everyday luxury staples crafted from 480 GSM dense cotton.", is_active: true, display_order: 2 }
         ]);
       }
@@ -393,14 +395,14 @@ export default function AdminDashboard() {
         .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
-      
+
       let localOrds: OrderItem[] = [];
       try {
         const stored = localStorage.getItem("noir_local_orders");
         if (stored) {
           localOrds = JSON.parse(stored);
         }
-      } catch {}
+      } catch { }
 
       if (ords && ords.length > 0) {
         const remoteIds = new Set(ords.map((o) => o.order_number));
@@ -415,14 +417,14 @@ export default function AdminDashboard() {
         .from("profiles")
         .select("*")
         .order("created_at", { ascending: false });
-      
+
       let localCusts: UserRecord[] = [];
       try {
         const storedClients = localStorage.getItem("noir_registered_clients");
         if (storedClients) {
           localCusts = JSON.parse(storedClients);
         }
-      } catch {}
+      } catch { }
 
       if (profs && profs.length > 0) {
         const remoteEmails = new Set(profs.map((p) => p.email.toLowerCase()));
@@ -443,7 +445,7 @@ export default function AdminDashboard() {
         try {
           const storedC = localStorage.getItem("noir_coupons");
           if (storedC) localCoupons = JSON.parse(storedC);
-        } catch {}
+        } catch { }
       }
       if (remoteCoupons.length > 0) {
         const remoteCodes = new Set(remoteCoupons.map((c) => c.code.toUpperCase()));
@@ -625,6 +627,7 @@ export default function AdminDashboard() {
       name: newProdName.trim(),
       subtitle: newProdSubtitle.trim() || undefined,
       description: newProdDescription.trim() || undefined,
+      department: newProdDepartment,
       category_id: matchedCat?.id || null,
       product_type_id: newProdType || null,
       collection_id: newProdCollection || null,
@@ -697,6 +700,7 @@ export default function AdminDashboard() {
     const res = await updateProductInDb(editingProduct.id, {
       name: editingProduct.name,
       subtitle: editingProduct.subtitle,
+      department: editingProduct.department ? (editingProduct.department.toLowerCase() as "men" | "women" | "kids") : undefined,
       price: Number(editingProduct.price),
       regular_price: Number(editingProduct.regular_price || editingProduct.original_price || editingProduct.price),
       stock_quantity: Number(editingProduct.stock_quantity),
@@ -731,7 +735,7 @@ export default function AdminDashboard() {
           const updated = ords.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
           localStorage.setItem("noir_local_orders", JSON.stringify(updated));
         }
-      } catch {}
+      } catch { }
     }
 
     try {
@@ -759,7 +763,7 @@ export default function AdminDashboard() {
           );
           localStorage.setItem("noir_local_orders", JSON.stringify(updated));
         }
-      } catch {}
+      } catch { }
     }
 
     try {
@@ -883,14 +887,14 @@ export default function AdminDashboard() {
     if (!confirm(`Are you sure you want to delete collection "${name}"?`)) return;
     try {
       await supabase.from("collections").delete().eq("id", colId);
-    } catch {}
+    } catch { }
 
     setCollectionsList((prev) => {
       const updated = prev.filter((c) => c.id !== colId);
       if (typeof window !== "undefined") {
         try {
           localStorage.setItem("noir_collections", JSON.stringify(updated));
-        } catch {}
+        } catch { }
       }
       return updated;
     });
@@ -915,24 +919,24 @@ export default function AdminDashboard() {
             image_url: collImage.trim() || null,
           })
           .eq("id", editingCollectionId);
-      } catch {}
+      } catch { }
 
       setCollectionsList((prev) => {
         const updated = prev.map((c) =>
           c.id === editingCollectionId
             ? {
-                ...c,
-                name: collName.trim(),
-                slug,
-                description: collDesc.trim(),
-                image_url: collImage.trim() || null,
-              }
+              ...c,
+              name: collName.trim(),
+              slug,
+              description: collDesc.trim(),
+              image_url: collImage.trim() || null,
+            }
             : c
         );
         if (typeof window !== "undefined") {
           try {
             localStorage.setItem("noir_collections", JSON.stringify(updated));
-          } catch {}
+          } catch { }
         }
         return updated;
       });
@@ -966,14 +970,14 @@ export default function AdminDashboard() {
         if (data) {
           newCol.id = data.id;
         }
-      } catch {}
+      } catch { }
 
       setCollectionsList((prev) => {
         const updated = [...prev, newCol];
         if (typeof window !== "undefined") {
           try {
             localStorage.setItem("noir_collections", JSON.stringify(updated));
-          } catch {}
+          } catch { }
         }
         return updated;
       });
@@ -1018,14 +1022,14 @@ export default function AdminDashboard() {
     if (!confirm(`Are you sure you want to delete coupon code "${code}"?`)) return;
     try {
       await supabase.from("coupons").delete().eq("id", cId);
-    } catch {}
+    } catch { }
 
     setCouponsList((prev) => {
       const updated = prev.filter((c) => c.id !== cId);
       if (typeof window !== "undefined") {
         try {
           localStorage.setItem("noir_coupons", JSON.stringify(updated));
-        } catch {}
+        } catch { }
       }
       return updated;
     });
@@ -1053,27 +1057,27 @@ export default function AdminDashboard() {
             is_active: coupIsActive,
           })
           .eq("id", editingCouponId);
-      } catch {}
+      } catch { }
 
       setCouponsList((prev) => {
         const updated = prev.map((c) =>
           c.id === editingCouponId
             ? {
-                ...c,
-                code: formattedCode,
-                discount_type: coupType,
-                discount_value: coupValue,
-                min_order_amount: coupMinOrder,
-                is_active: coupIsActive,
-                product_id: coupProductId || null,
-                product_name: prodName,
-              }
+              ...c,
+              code: formattedCode,
+              discount_type: coupType,
+              discount_value: coupValue,
+              min_order_amount: coupMinOrder,
+              is_active: coupIsActive,
+              product_id: coupProductId || null,
+              product_name: prodName,
+            }
             : c
         );
         if (typeof window !== "undefined") {
           try {
             localStorage.setItem("noir_coupons", JSON.stringify(updated));
-          } catch {}
+          } catch { }
         }
         return updated;
       });
@@ -1107,14 +1111,14 @@ export default function AdminDashboard() {
         if (data) {
           newCoupon.id = data.id;
         }
-      } catch {}
+      } catch { }
 
       setCouponsList((prev) => {
         const updated = [...prev, newCoupon];
         if (typeof window !== "undefined") {
           try {
             localStorage.setItem("noir_coupons", JSON.stringify(updated));
-          } catch {}
+          } catch { }
         }
         return updated;
       });
@@ -1162,11 +1166,10 @@ export default function AdminDashboard() {
   const SIDEBAR_ITEMS: { id: AdminSection; label: string; icon: React.ElementType; badge?: number }[] = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "analytics", label: "Sales & Analytics", icon: BarChart3 },
-    { id: "products", label: "Products", icon: Package, badge: productsList.length },
+    { id: "products", label: "Product Management", icon: Package, badge: productsList.length },
     { id: "add-product", label: "Add Product", icon: PlusCircle },
     { id: "categories", label: "Categories", icon: Layers, badge: categoriesList.length },
     { id: "product-types", label: "Product Types", icon: FolderTree, badge: productTypesList.length },
-    { id: "collections", label: "Collections", icon: Sparkles, badge: collectionsList.length },
     { id: "orders", label: "Orders (COD)", icon: ShoppingBag, badge: ordersList.length },
     { id: "customers", label: "Customers", icon: Users, badge: usersList.length },
     { id: "inventory", label: "Inventory", icon: Boxes },
@@ -1234,11 +1237,10 @@ export default function AdminDashboard() {
       {/* Floating Status Notification */}
       {feedbackMsg && (
         <div
-          className={`fixed top-6 right-6 z-[300] px-5 py-3 border text-xs font-mono flex items-center gap-3 shadow-2xl backdrop-blur-md transition-all ${
-            feedbackMsg.type === "success"
+          className={`fixed top-6 right-6 z-[300] px-5 py-3 border text-xs font-mono flex items-center gap-3 shadow-2xl backdrop-blur-md transition-all ${feedbackMsg.type === "success"
               ? "bg-emerald-950/90 border-emerald-500/40 text-emerald-200"
               : "bg-red-950/90 border-red-500/40 text-red-200"
-          }`}
+            }`}
         >
           {feedbackMsg.type === "success" ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -1253,9 +1255,8 @@ export default function AdminDashboard() {
       {/* 13-ITEM PROFESSIONAL SIDEBAR (Fixed Left) */}
       {/* ========================================================= */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 z-[150] w-64 bg-[#0a0a0a] border-r border-white/10 flex flex-col justify-between transition-transform duration-300 md:translate-x-0 ${
-          isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed top-0 left-0 bottom-0 z-[150] w-64 bg-[#0a0a0a] border-r border-white/10 flex flex-col justify-between transition-transform duration-300 md:translate-x-0 ${isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         {/* Brand & Terminal Header */}
         <div>
@@ -1294,11 +1295,10 @@ export default function AdminDashboard() {
                     setActiveSection(item.id);
                     setIsMobileSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${
-                    isActive
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider transition-all cursor-pointer ${isActive
                       ? "bg-[#c5a46d] text-black font-extrabold shadow-lg shadow-[#c5a46d]/15"
                       : "text-neutral-400 hover:text-white hover:bg-white/5"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <Icon className={`w-4 h-4 ${isActive ? "text-black" : "text-neutral-400"}`} />
@@ -1306,11 +1306,10 @@ export default function AdminDashboard() {
                   </div>
                   {item.badge !== undefined && item.badge > 0 && (
                     <span
-                      className={`text-[10px] px-2 py-0.5 font-bold ${
-                        isActive
+                      className={`text-[10px] px-2 py-0.5 font-bold ${isActive
                           ? "bg-black text-[#c5a46d]"
                           : "bg-white/10 text-neutral-300"
-                      }`}
+                        }`}
                     >
                       {item.badge}
                     </span>
@@ -1417,7 +1416,7 @@ export default function AdminDashboard() {
                     {productsList.filter((p) => p.is_published).length}
                   </div>
                   <span className="text-[10px] font-mono text-neutral-500 block">
-                    {productsList.length} Total Silhouettes Registered
+                    {productsList.length} Total product Registered
                   </span>
                 </div>
 
@@ -1470,7 +1469,7 @@ export default function AdminDashboard() {
                   <h3 className="text-lg font-bold text-white uppercase font-display">
                     {productsList.length === 0
                       ? "Clean Fresh Catalogue · Ready for New Products"
-                      : `${productsList.length} Active Silhouettes Synced to Storefront`}
+                      : `${productsList.length} Active product Synced to Storefront`}
                   </h3>
                   <p className="text-xs text-neutral-400 mt-0.5">
                     All demo pieces have been archived. You have complete 100% control over additions, edits, and stock.
@@ -1608,566 +1607,17 @@ export default function AdminDashboard() {
           )}
 
           {/* ===================================================== */}
-          {/* 2. PRODUCTS TABLE */}
+          {/* 2 & 3. COMPREHENSIVE PRODUCT MANAGEMENT SYSTEM */}
           {/* ===================================================== */}
-          {activeSection === "products" && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-black uppercase tracking-tight font-display">
-                    Product Catalogue ({productsList.length})
-                  </h2>
-                  <p className="text-xs font-mono text-neutral-400">
-                    Live Supabase database catalogue. Published silhouettes appear instantly on customer storefront.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setActiveSection("add-product")}
-                  className="px-4 py-2.5 bg-[#c5a46d] hover:bg-[#d4b57e] text-black font-extrabold text-xs font-mono uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-[#c5a46d]/15"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add New Silhouette</span>
-                </button>
-              </div>
-
-              {/* Filters */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search silhouettes by name, SKU or tags..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-black border border-white/15 pl-10 pr-4 py-2 text-xs font-mono text-white placeholder-neutral-600 focus:outline-none focus:border-[#c5a46d]"
-                  />
-                </div>
-                <select
-                  value={filterCategory}
-                  onChange={(e) => setFilterCategory(e.target.value)}
-                  className="bg-black border border-white/15 px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#c5a46d]"
-                >
-                  <option value="all">All Categories</option>
-                  {categoriesList.map((c) => (
-                    <option key={c.id} value={c.slug}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Table */}
-              <div className="bg-[#0a0a0a] border border-white/10 overflow-x-auto">
-                <table className="w-full text-left text-xs font-mono">
-                  <thead>
-                    <tr className="border-b border-white/10 text-[10px] text-neutral-400 uppercase tracking-widest bg-black/60">
-                      <th className="p-4">Piece</th>
-                      <th className="p-4">Category</th>
-                      <th className="p-4">Price</th>
-                      <th className="p-4">Stock</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {productsList.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-12 text-center text-neutral-500">
-                          <Package className="w-10 h-10 mx-auto text-neutral-700 mb-3" />
-                          <p className="text-sm uppercase font-bold text-neutral-400">Catalogue is Empty</p>
-                          <p className="text-xs text-neutral-600 mt-1">
-                            Click &ldquo;Add New Silhouette&rdquo; above to register your first luxury fashion piece.
-                          </p>
-                        </td>
-                      </tr>
-                    ) : (
-                      productsList
-                        .filter((p) => {
-                          const matchesSearch =
-                            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase()));
-                          const matchesCat = filterCategory === "all" || p.category?.slug === filterCategory;
-                          return matchesSearch && matchesCat;
-                        })
-                        .map((prod) => (
-                          <tr key={prod.id} className="hover:bg-white/[0.02] transition-colors">
-                            <td className="p-4 flex items-center gap-3">
-                              <img
-                                src={prod.images?.[0]?.url || "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=100&q=80"}
-                                alt={prod.name}
-                                className="w-10 h-12 object-cover border border-white/10 bg-black"
-                              />
-                              <div>
-                                <span className="font-bold text-white block">{prod.name}</span>
-                                <span className="text-[10px] text-neutral-500">SKU: {prod.sku || "N/A"}</span>
-                              </div>
-                            </td>
-                            <td className="p-4 text-neutral-400 uppercase text-[11px]">
-                              {prod.category?.name || "Outerwear"}
-                            </td>
-                            <td className="p-4 text-white font-bold">
-                              {formatPrice(prod.price)}
-                            </td>
-                            <td className="p-4">
-                              <span
-                                className={`px-2 py-0.5 text-[10px] font-bold ${
-                                  (prod.stock_quantity ?? 0) > 5
-                                    ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/30"
-                                    : "bg-red-950/60 text-red-400 border border-red-500/30"
-                                }`}
-                              >
-                                {prod.stock_quantity ?? 0} in stock
-                              </span>
-                            </td>
-                            <td className="p-4">
-                              <button
-                                onClick={() => handleTogglePublish(prod.id, prod.is_published)}
-                                className={`px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider border cursor-pointer transition-all ${
-                                  prod.is_published
-                                    ? "bg-emerald-950/50 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/50"
-                                    : "bg-amber-950/50 text-amber-400 border-amber-500/30 hover:bg-amber-900/50"
-                                }`}
-                              >
-                                {prod.is_published ? "PUBLISHED" : "DRAFT"}
-                              </button>
-                            </td>
-                            <td className="p-4 text-right space-x-2">
-                              <button
-                                onClick={() => setEditingProduct(prod)}
-                                title="Edit silhouette"
-                                className="p-2 border border-white/10 hover:border-[#c5a46d] hover:text-[#c5a46d] transition-colors"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleArchiveProduct(prod.id, prod.name)}
-                                title="Safely remove from storefront"
-                                className="p-2 border border-white/10 hover:border-red-500 hover:text-red-400 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Edit Product Modal */}
-              {editingProduct && (
-                <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                  <div className="bg-[#0a0a0a] border border-white/20 p-6 md:p-8 max-w-lg w-full space-y-6">
-                    <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                      <h3 className="text-lg font-bold uppercase font-display text-white">
-                        Edit Silhouette
-                      </h3>
-                      <button
-                        onClick={() => setEditingProduct(null)}
-                        className="text-neutral-400 hover:text-white"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <form onSubmit={handleSaveEditedProduct} className="space-y-4 font-mono text-xs">
-                      <div>
-                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Name</label>
-                        <input
-                          type="text"
-                          required
-                          value={editingProduct.name}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                          className="w-full bg-black border border-white/20 px-3 py-2 text-white"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] text-neutral-400 uppercase mb-1">Selling Price (₹)</label>
-                          <input
-                            type="number"
-                            required
-                            value={editingProduct.price}
-                            onChange={(e) => setEditingProduct({ ...editingProduct, price: Number(e.target.value) })}
-                            className="w-full bg-black border border-white/20 px-3 py-2 text-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] text-neutral-400 uppercase mb-1">Stock Units</label>
-                          <input
-                            type="number"
-                            required
-                            value={editingProduct.stock_quantity ?? 0}
-                            onChange={(e) => setEditingProduct({ ...editingProduct, stock_quantity: Number(e.target.value) })}
-                            className="w-full bg-black border border-white/20 px-3 py-2 text-white"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] text-neutral-400 uppercase mb-1">Category</label>
-                        <select
-                          value={editingProduct.category_id || ""}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, category_id: e.target.value || null })}
-                          className="w-full bg-black border border-white/20 px-3 py-2 text-white"
-                        >
-                          {categoriesList.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-2">
-                        <input
-                          type="checkbox"
-                          id="edit-published"
-                          checked={editingProduct.is_published}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, is_published: e.target.checked })}
-                          className="accent-[#c5a46d]"
-                        />
-                        <label htmlFor="edit-published" className="text-neutral-300 text-xs cursor-pointer">
-                          Published to Storefront
-                        </label>
-                      </div>
-
-                      <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
-                        <button
-                          type="button"
-                          onClick={() => setEditingProduct(null)}
-                          className="px-4 py-2 border border-white/20 text-neutral-400 hover:text-white"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-6 py-2 bg-[#c5a46d] text-black font-bold uppercase tracking-wider hover:bg-[#d6b77e]"
-                        >
-                          Save Changes
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ===================================================== */}
-          {/* 3. ADD PRODUCT */}
-          {/* ===================================================== */}
-          {activeSection === "add-product" && (
-            <div className="max-w-4xl mx-auto space-y-8">
-              <div className="border-b border-white/10 pb-4">
-                <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#c5a46d] block mb-1">
-                  CREATION STUDIO // NEW SILHOUETTE
-                </span>
-                <h2 className="text-2xl font-black uppercase tracking-tight font-display">
-                  Register New Product
-                </h2>
-                <p className="text-xs font-mono text-neutral-400 mt-1">
-                  Upload multiple product images, configure sizes (UK / India for footwear), and sync directly to Supabase.
-                </p>
-              </div>
-
-              <form onSubmit={handleCreateProduct} className="space-y-8 text-xs font-mono">
-                {/* 1. Media Upload */}
-                <div className="p-6 bg-[#0a0a0a] border border-white/10 space-y-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4 text-[#c5a46d]" />
-                    Product Images (Supabase Storage: product-media)
-                  </h3>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {uploadedImageUrls.map((url, idx) => (
-                      <div key={idx} className="relative aspect-[3/4] bg-black border border-white/15 group overflow-hidden">
-                        <img src={url} alt="Upload preview" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveImage(url)}
-                          className="absolute top-2 right-2 p-1.5 bg-black/80 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-black transition-all"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                        {idx === 0 && (
-                          <span className="absolute bottom-2 left-2 bg-[#c5a46d] text-black px-1.5 py-0.5 text-[9px] font-bold uppercase">
-                            Primary
-                          </span>
-                        )}
-                      </div>
-                    ))}
-
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploadingImage}
-                      className="aspect-[3/4] border-2 border-dashed border-white/20 hover:border-[#c5a46d] flex flex-col items-center justify-center p-4 text-center text-neutral-400 hover:text-white transition-all cursor-pointer"
-                    >
-                      <Upload className={`w-6 h-6 mb-2 ${isUploadingImage ? "animate-bounce text-[#c5a46d]" : ""}`} />
-                      <span className="text-[11px] uppercase font-bold">
-                        {isUploadingImage ? "Uploading..." : "Upload Images"}
-                      </span>
-                      <span className="text-[9px] text-neutral-500 mt-1">JPG, PNG, WEBP</span>
-                    </button>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className="hidden"
-                  />
-                </div>
-
-                {/* 2. Core Information */}
-                <div className="p-6 bg-[#0a0a0a] border border-white/10 space-y-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                    Silhouette Attributes
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Product Name *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. PHANTOM OVERSIZED HOODIE"
-                        value={newProdName}
-                        onChange={(e) => setNewProdName(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Subtitle / Sub-header</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Heavyweight 480 GSM French Terry"
-                        value={newProdSubtitle}
-                        onChange={(e) => setNewProdSubtitle(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Department / Category</label>
-                      <select
-                        value={newProdCategory}
-                        onChange={(e) => setNewProdCategory(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      >
-                        {categoriesList.map((c) => (
-                          <option key={c.id} value={c.slug}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Product SKU</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. NOIR-HD-001"
-                        value={newProdSku}
-                        onChange={(e) => setNewProdSku(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Regular Price (₹ MRP) *</label>
-                      <input
-                        type="number"
-                        required
-                        value={newProdRegularPrice}
-                        onChange={(e) => setNewProdRegularPrice(Number(e.target.value))}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Selling Price (₹ Incl. GST) *</label>
-                      <input
-                        type="number"
-                        required
-                        value={newProdPrice}
-                        onChange={(e) => setNewProdPrice(Number(e.target.value))}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Product Type</label>
-                      <select
-                        value={newProdType}
-                        onChange={(e) => setNewProdType(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      >
-                        <option value="">Standard Atelier</option>
-                        {productTypesList.map((pt) => (
-                          <option key={pt.id} value={pt.id}>
-                            {pt.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Collection</label>
-                      <select
-                        value={newProdCollection}
-                        onChange={(e) => setNewProdCollection(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      >
-                        <option value="">Core Atelier</option>
-                        {collectionsList.map((col) => (
-                          <option key={col.id} value={col.id}>
-                            {col.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Fabric & Material</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 480 GSM Loopback French Terry Cotton"
-                        value={newProdMaterial}
-                        onChange={(e) => setNewProdMaterial(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Tailored Silhouette / Fit</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Oversized Boxy Drop-Shoulder"
-                        value={newProdFit}
-                        onChange={(e) => setNewProdFit(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Editorial Description</label>
-                      <textarea
-                        rows={3}
-                        placeholder="Detailed garment philosophy, structural breakdown, and silhouette styling instructions..."
-                        value={newProdDescription}
-                        onChange={(e) => setNewProdDescription(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">Search & Aesthetic Tags (Comma separated)</label>
-                      <input
-                        type="text"
-                        placeholder="heavyweight, oversized, luxury streetwear"
-                        value={newProdTags}
-                        onChange={(e) => setNewProdTags(e.target.value)}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Sizing, Colors & Stock */}
-                <div className="p-6 bg-[#0a0a0a] border border-white/10 space-y-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-                    Sizing (UK / India) & Colors
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">
-                        Available Sizes (Comma separated)
-                      </label>
-                      <input
-                        type="text"
-                        value={newProdSizes}
-                        onChange={(e) => setNewProdSizes(e.target.value)}
-                        placeholder="Clothing: S, M, L, XL | Footwear: UK 7, UK 8, UK 9, UK 10"
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                      <span className="text-[9px] text-neutral-500 mt-1 block">
-                        Footwear uses Indian/UK sizing (UK 7, UK 8, UK 9, UK 10, UK 11).
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">
-                        Total Starting Stock (Units)
-                      </label>
-                      <input
-                        type="number"
-                        value={newProdStock}
-                        onChange={(e) => setNewProdStock(Number(e.target.value))}
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] text-neutral-400 uppercase mb-1">
-                        Colors (Name:Hex Code, comma separated)
-                      </label>
-                      <input
-                        type="text"
-                        value={newProdColors}
-                        onChange={(e) => setNewProdColors(e.target.value)}
-                        placeholder="Obsidian Black:#0a0a0a, Imperial Gold:#c5a46d, Lunar Grey:#404040"
-                        className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 4. Badges & Visibility */}
-                <div className="p-6 bg-[#0a0a0a] border border-white/10 flex flex-wrap gap-6 items-center">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newProdIsPublished}
-                      onChange={(e) => setNewProdIsPublished(e.target.checked)}
-                      className="w-4 h-4 accent-[#c5a46d]"
-                    />
-                    <span className="text-white uppercase text-xs">Publish to Storefront</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newProdIsNew}
-                      onChange={(e) => setNewProdIsNew(e.target.checked)}
-                      className="w-4 h-4 accent-[#c5a46d]"
-                    />
-                    <span className="text-white uppercase text-xs">New Arrival Badge</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newProdIsBestSeller}
-                      onChange={(e) => setNewProdIsBestSeller(e.target.checked)}
-                      className="w-4 h-4 accent-[#c5a46d]"
-                    />
-                    <span className="text-white uppercase text-xs">Best Seller Badge</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newProdIsFeatured}
-                      onChange={(e) => setNewProdIsFeatured(e.target.checked)}
-                      className="w-4 h-4 accent-[#c5a46d]"
-                    />
-                    <span className="text-white uppercase text-xs">Featured Hero Drop</span>
-                  </label>
-                </div>
-
-                {/* Submit */}
-                <button
-                  type="submit"
-                  className="w-full py-4 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-xs uppercase tracking-[0.25em] transition-all shadow-xl shadow-[#c5a46d]/20 cursor-pointer flex items-center justify-center gap-3"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  <span>Insert Silhouette into Supabase</span>
-                </button>
-              </form>
-            </div>
+          {(activeSection === "products" || activeSection === "add-product") && (
+            <ProductManagementSection
+              products={productsList}
+              categories={categoriesList}
+              productTypes={productTypesList}
+              onRefresh={refreshAllData}
+              showNotification={showNotification}
+              initialTab={activeSection === "add-product" ? "add-product" : "all-products"}
+            />
           )}
 
           {/* ===================================================== */}
@@ -2249,91 +1699,6 @@ export default function AdminDashboard() {
                     <p className="text-xs text-neutral-400">{pt.description}</p>
                   </div>
                 ))}
-              </div>
-            </div>
-          )}
-
-          {/* ===================================================== */}
-          {/* 6. COLLECTIONS */}
-          {/* ===================================================== */}
-          {activeSection === "collections" && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-black uppercase tracking-tight font-display text-white">
-                    Seasonal Drops & Runway Collections ({collectionsList.length})
-                  </h2>
-                  <p className="text-xs font-mono text-neutral-400">
-                    Create, edit, or delete runway collections, seasonal drops, and lookbook capsules.
-                  </p>
-                </div>
-                <button
-                  onClick={handleOpenCreateCollection}
-                  className="px-4 py-2.5 bg-[#c5a46d] hover:bg-[#d4b57e] text-black font-bold text-xs font-mono uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer self-start sm:self-auto"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Create New Collection</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {collectionsList.length === 0 ? (
-                  <div className="col-span-full p-12 text-center text-neutral-500 bg-[#0a0a0a] border border-white/10 font-mono">
-                    <Layers className="w-10 h-10 mx-auto text-neutral-700 mb-3" />
-                    <p className="text-sm uppercase font-bold text-neutral-400">No Collections Found</p>
-                    <p className="text-xs text-neutral-600 mt-1">
-                      Click &ldquo;Create New Collection&rdquo; to launch your first runway drop.
-                    </p>
-                  </div>
-                ) : (
-                  collectionsList.map((col) => (
-                    <div
-                      key={col.id}
-                      className="bg-[#0a0a0a] border border-white/10 overflow-hidden font-mono group flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="aspect-video bg-neutral-900 relative overflow-hidden">
-                          <img
-                            src={
-                              col.image_url ||
-                              "https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=800&q=80"
-                            }
-                            alt={col.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
-                          <span className="absolute top-3 left-3 bg-[#c5a46d] text-black px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                            Active Collection
-                          </span>
-                          <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] text-neutral-400 px-2 py-0.5">
-                            /{col.slug}
-                          </span>
-                        </div>
-                        <div className="p-5 space-y-2">
-                          <h3 className="text-base font-bold text-white uppercase tracking-wide">{col.name}</h3>
-                          <p className="text-xs text-neutral-400 line-clamp-2 leading-relaxed">
-                            {col.description || "Curated runway drop designed for modern street tailoring."}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="p-4 pt-0 border-t border-white/5 flex items-center justify-end gap-2 bg-black/40">
-                        <button
-                          onClick={() => handleOpenEditCollection(col)}
-                          className="px-3 py-1.5 border border-white/20 hover:border-[#c5a46d] text-[11px] text-neutral-300 hover:text-white uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Edit className="w-3.5 h-3.5 text-[#c5a46d]" />
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCollection(col.id, col.name)}
-                          className="px-3 py-1.5 border border-red-500/30 hover:border-red-500 text-[11px] text-red-400 hover:text-red-300 uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
               </div>
             </div>
           )}
@@ -2442,17 +1807,15 @@ export default function AdminDashboard() {
                       <button
                         key={tab.id}
                         onClick={() => setOrderStatusFilter(tab.id)}
-                        className={`px-3.5 py-2 whitespace-nowrap uppercase tracking-wider text-[11px] font-bold flex items-center gap-2 transition-all cursor-pointer border ${
-                          isActive
+                        className={`px-3.5 py-2 whitespace-nowrap uppercase tracking-wider text-[11px] font-bold flex items-center gap-2 transition-all cursor-pointer border ${isActive
                             ? "bg-[#c5a46d] text-black border-[#c5a46d] shadow-md shadow-[#c5a46d]/20"
                             : "bg-[#0a0a0a] text-neutral-400 border-white/10 hover:border-white/30 hover:text-white"
-                        }`}
+                          }`}
                       >
                         <span className={isActive ? "text-black" : tab.color}>{tab.label}</span>
                         <span
-                          className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                            isActive ? "bg-black text-white font-black" : "bg-white/10 text-neutral-300"
-                          }`}
+                          className={`px-1.5 py-0.2 rounded-full text-[10px] ${isActive ? "bg-black text-white font-black" : "bg-white/10 text-neutral-300"
+                            }`}
                         >
                           {tab.count}
                         </span>
@@ -2466,21 +1829,20 @@ export default function AdminDashboard() {
               <div className="p-4 bg-[#0a0a0a] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-3 h-3 rounded-full ${
-                      orderStatusFilter === "delivered"
+                    className={`w-3 h-3 rounded-full ${orderStatusFilter === "delivered"
                         ? "bg-emerald-400 ring-4 ring-emerald-500/20"
                         : orderStatusFilter === "cancelled"
-                        ? "bg-red-400 ring-4 ring-red-500/20"
-                        : orderStatusFilter === "pending"
-                        ? "bg-[#c5a46d] ring-4 ring-[#c5a46d]/20"
-                        : orderStatusFilter === "processing"
-                        ? "bg-purple-400 ring-4 ring-purple-500/20"
-                        : orderStatusFilter === "shipped"
-                        ? "bg-blue-400 ring-4 ring-blue-500/20"
-                        : orderStatusFilter === "confirmed"
-                        ? "bg-amber-400 ring-4 ring-amber-500/20"
-                        : "bg-white ring-4 ring-white/20"
-                    }`}
+                          ? "bg-red-400 ring-4 ring-red-500/20"
+                          : orderStatusFilter === "pending"
+                            ? "bg-[#c5a46d] ring-4 ring-[#c5a46d]/20"
+                            : orderStatusFilter === "processing"
+                              ? "bg-purple-400 ring-4 ring-purple-500/20"
+                              : orderStatusFilter === "shipped"
+                                ? "bg-blue-400 ring-4 ring-blue-500/20"
+                                : orderStatusFilter === "confirmed"
+                                  ? "bg-amber-400 ring-4 ring-amber-500/20"
+                                  : "bg-white ring-4 ring-white/20"
+                      }`}
                   />
                   <div>
                     <span className="text-white font-bold uppercase tracking-wider">
@@ -2673,11 +2035,10 @@ export default function AdminDashboard() {
                                   ✓ {custStats.totalOrdered} Ordered
                                 </span>
                                 <span
-                                  className={`font-bold border px-1.5 py-0.5 rounded-none ${
-                                    custStats.totalCancelled > 0
+                                  className={`font-bold border px-1.5 py-0.5 rounded-none ${custStats.totalCancelled > 0
                                       ? "text-red-400 bg-red-950/70 border-red-500/30"
                                       : "text-neutral-500 bg-black/40 border-white/10"
-                                  }`}
+                                    }`}
                                   title="Total products cancelled by this customer"
                                 >
                                   ✕ {custStats.totalCancelled} Cancelled
@@ -2721,19 +2082,18 @@ export default function AdminDashboard() {
                                 onChange={(e) =>
                                   handleUpdateOrderStatus(ord.id, e.target.value as OrderItem["status"])
                                 }
-                                className={`bg-black border px-2.5 py-1 text-[11px] uppercase font-bold focus:outline-none cursor-pointer ${
-                                  ord.status === "delivered"
+                                className={`bg-black border px-2.5 py-1 text-[11px] uppercase font-bold focus:outline-none cursor-pointer ${ord.status === "delivered"
                                     ? "border-emerald-500/50 text-emerald-400"
                                     : ord.status === "cancelled"
-                                    ? "border-red-500/50 text-red-400"
-                                    : ord.status === "shipped"
-                                    ? "border-blue-500/50 text-blue-400"
-                                    : ord.status === "processing"
-                                    ? "border-purple-500/50 text-purple-400"
-                                    : ord.status === "confirmed"
-                                    ? "border-[#c5a46d] text-[#c5a46d]"
-                                    : "border-amber-500/50 text-amber-400"
-                                }`}
+                                      ? "border-red-500/50 text-red-400"
+                                      : ord.status === "shipped"
+                                        ? "border-blue-500/50 text-blue-400"
+                                        : ord.status === "processing"
+                                          ? "border-purple-500/50 text-purple-400"
+                                          : ord.status === "confirmed"
+                                            ? "border-[#c5a46d] text-[#c5a46d]"
+                                            : "border-amber-500/50 text-amber-400"
+                                  }`}
                               >
                                 <option value="delivered">Delivered</option>
                                 <option value="cancelled">Cancelled</option>
@@ -2813,17 +2173,16 @@ export default function AdminDashboard() {
                             Complete Order Details
                           </span>
                           <span
-                            className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded ${
-                              selectedOrder.status === "delivered"
+                            className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded ${selectedOrder.status === "delivered"
                                 ? "bg-emerald-950 text-emerald-400 border border-emerald-500/30"
                                 : selectedOrder.status === "cancelled"
-                                ? "bg-red-950 text-red-400 border border-red-500/30"
-                                : selectedOrder.status === "shipped"
-                                ? "bg-blue-950 text-blue-400 border border-blue-500/30"
-                                : selectedOrder.status === "processing"
-                                ? "bg-purple-950 text-purple-400 border border-purple-500/30"
-                                : "bg-amber-950 text-amber-400 border border-amber-500/30"
-                            }`}
+                                  ? "bg-red-950 text-red-400 border border-red-500/30"
+                                  : selectedOrder.status === "shipped"
+                                    ? "bg-blue-950 text-blue-400 border border-blue-500/30"
+                                    : selectedOrder.status === "processing"
+                                      ? "bg-purple-950 text-purple-400 border border-purple-500/30"
+                                      : "bg-amber-950 text-amber-400 border border-amber-500/30"
+                              }`}
                           >
                             {selectedOrder.status}
                           </span>
@@ -2876,9 +2235,8 @@ export default function AdminDashboard() {
                             <div>
                               <span className="text-[10px] text-neutral-500 uppercase block">Products Cancelled</span>
                               <span
-                                className={`font-bold block text-sm ${
-                                  modalCustStats.totalCancelled > 0 ? "text-red-400" : "text-neutral-400"
-                                }`}
+                                className={`font-bold block text-sm ${modalCustStats.totalCancelled > 0 ? "text-red-400" : "text-neutral-400"
+                                  }`}
                               >
                                 {modalCustStats.totalCancelled} items
                               </span>
@@ -3201,9 +2559,8 @@ export default function AdminDashboard() {
                             <td className="p-4">
                               <div className="flex items-center gap-1.5">
                                 <span
-                                  className={`font-bold text-sm ${
-                                    itemsCancelled > 0 ? "text-red-400" : "text-neutral-500"
-                                  }`}
+                                  className={`font-bold text-sm ${itemsCancelled > 0 ? "text-red-400" : "text-neutral-500"
+                                    }`}
                                 >
                                   {itemsCancelled}
                                 </span>
@@ -3218,22 +2575,20 @@ export default function AdminDashboard() {
                             </td>
                             <td className="p-4">
                               <span
-                                className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                                  usr.role === "admin"
+                                className={`px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${usr.role === "admin"
                                     ? "bg-[#c5a46d] text-black"
                                     : "bg-neutral-800 text-neutral-300"
-                                }`}
+                                  }`}
                               >
                                 {usr.role}
                               </span>
                             </td>
                             <td className="p-4">
                               <span
-                                className={`px-2 py-0.5 text-[9px] font-bold uppercase ${
-                                  usr.is_blocked
+                                className={`px-2 py-0.5 text-[9px] font-bold uppercase ${usr.is_blocked
                                     ? "bg-red-950/60 text-red-400 border border-red-500/30"
                                     : "bg-emerald-950/60 text-emerald-400 border border-emerald-500/30"
-                                }`}
+                                  }`}
                               >
                                 {usr.is_blocked ? "BLOCKED" : "ACTIVE"}
                               </span>
@@ -3253,11 +2608,10 @@ export default function AdminDashboard() {
                               {usr.role !== "admin" && (
                                 <button
                                   onClick={() => handleToggleBlockCustomer(usr.id, usr.is_blocked)}
-                                  className={`px-2.5 py-1 text-[10px] uppercase font-bold border cursor-pointer transition-colors ${
-                                    usr.is_blocked
+                                  className={`px-2.5 py-1 text-[10px] uppercase font-bold border cursor-pointer transition-colors ${usr.is_blocked
                                       ? "border-emerald-500/40 text-emerald-400 hover:bg-emerald-950"
                                       : "border-red-500/40 text-red-400 hover:bg-red-950"
-                                  }`}
+                                    }`}
                                 >
                                   {usr.is_blocked ? "Unblock" : "Block"}
                                 </button>
@@ -3280,7 +2634,7 @@ export default function AdminDashboard() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-black uppercase tracking-tight font-display">
-                  Live Stock Manager ({productsList.length} Silhouettes)
+                  Live Stock Manager ({productsList.length} product)
                 </h2>
                 <p className="text-xs font-mono text-neutral-400">
                   Instant real-time stock adjustments. Out-of-stock items will automatically show sold-out indicators.
@@ -3405,11 +2759,10 @@ export default function AdminDashboard() {
                               {c.code}
                             </span>
                             <span
-                              className={`text-[9px] px-2 py-0.5 font-bold uppercase rounded ${
-                                c.is_active
+                              className={`text-[9px] px-2 py-0.5 font-bold uppercase rounded ${c.is_active
                                   ? "bg-emerald-950 text-emerald-400 border border-emerald-500/30"
                                   : "bg-neutral-800 text-neutral-400 border border-white/10"
-                              }`}
+                                }`}
                             >
                               {c.is_active ? "ACTIVE" : "INACTIVE"}
                             </span>
@@ -3718,75 +3071,6 @@ export default function AdminDashboard() {
                 </button>
                 <button type="submit" className="px-4 py-2 bg-[#c5a46d] text-black font-bold">
                   Save Product Type
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* MODAL: CREATE / EDIT COLLECTION */}
-      {/* ========================================================= */}
-      {isCollectionModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0a0a0a] border border-white/15 p-6 space-y-4 font-mono text-xs">
-            <div className="flex justify-between items-center border-b border-white/10 pb-3">
-              <span className="text-sm font-bold uppercase text-white">
-                {collectionModalMode === "edit" ? "Edit Runway Collection" : "Create Runway Collection"}
-              </span>
-              <button
-                onClick={() => setIsCollectionModalOpen(false)}
-                className="text-neutral-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveCollection} className="space-y-3">
-              <div>
-                <label className="block text-[10px] text-neutral-400 uppercase mb-1">Collection Title *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Winter Monolith Runway"
-                  value={collName}
-                  onChange={(e) => setCollName(e.target.value)}
-                  className="w-full bg-black border border-white/15 px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-[#c5a46d]"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] text-neutral-400 uppercase mb-1">Banner Image URL</label>
-                <input
-                  type="text"
-                  placeholder="https://images.unsplash.com/..."
-                  value={collImage}
-                  onChange={(e) => setCollImage(e.target.value)}
-                  className="w-full bg-black border border-white/15 px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-[#c5a46d]"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] text-neutral-400 uppercase mb-1">Concept Description</label>
-                <textarea
-                  rows={2}
-                  placeholder="Runway story and aesthetic..."
-                  value={collDesc}
-                  onChange={(e) => setCollDesc(e.target.value)}
-                  className="w-full bg-black border border-white/15 px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-[#c5a46d]"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCollectionModalOpen(false)}
-                  className="px-4 py-2 border border-white/15 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#c5a46d] hover:bg-[#d4b57e] text-black font-bold uppercase transition-colors cursor-pointer"
-                >
-                  {collectionModalMode === "edit" ? "Update Collection" : "Launch Collection"}
                 </button>
               </div>
             </form>

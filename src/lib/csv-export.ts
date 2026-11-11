@@ -71,7 +71,7 @@ export function exportOrdersCSV(
     "PIN Code",
     "Country",
     "Item Count",
-    "Ordered Silhouettes Breakdown",
+    "Ordered product Breakdown",
     "Payment Method",
     "Subtotal (INR)",
     "Discount (INR)",

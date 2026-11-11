@@ -8,6 +8,7 @@ export type DbProduct = {
   name: string;
   subtitle: string | null;
   description: string | null;
+  department?: "men" | "women" | "kids" | null;
   category_id: string | null;
   category?: { slug: string; name: string } | null;
   product_type_id?: string | null;
@@ -31,6 +32,7 @@ export type DbProduct = {
   stock_quantity: number;
   cost_price?: number | null;
   sku: string | null;
+  brand?: string | null;
   rating: number;
   reviews_count: number;
   details: string[];
@@ -51,15 +53,24 @@ export function mapDbProductToFashion(dbProd: DbProduct): Product {
           .map((img) => img.url)
       : ["/images/placeholder-silhouette.png"];
 
-  // Aggregate colors from variants
+  // Aggregate colors from variants (replace Obsidian Black with Atelier White)
   const colorMap = new Map<string, ProductColor>();
   if (dbProd.variants && dbProd.variants.length > 0) {
     dbProd.variants.forEach((v) => {
-      if (!colorMap.has(v.color_hex)) {
-        colorMap.set(v.color_hex, {
-          name: v.color_name,
-          hex: v.color_hex,
-          bgClass: "",
+      const isBlack =
+        (v.color_name && v.color_name.toLowerCase().includes("black")) ||
+        v.color_hex?.toLowerCase() === "#0a0a0a" ||
+        v.color_hex?.toLowerCase() === "#000000" ||
+        v.color_hex?.toLowerCase() === "#161616";
+
+      const colName = isBlack ? "Atelier White" : v.color_name;
+      const colHex = isBlack ? "#FFFFFF" : v.color_hex;
+
+      if (!colorMap.has(colHex)) {
+        colorMap.set(colHex, {
+          name: colName,
+          hex: colHex,
+          bgClass: isBlack ? "bg-white" : "",
         });
       }
     });
@@ -67,7 +78,7 @@ export function mapDbProductToFashion(dbProd: DbProduct): Product {
 
   const colors = Array.from(colorMap.values());
   const fallbackColors = [
-    { name: "Obsidian Black", hex: "#0a0a0a", bgClass: "bg-neutral-950" },
+    { name: "Atelier White", hex: "#FFFFFF", bgClass: "bg-white" },
   ];
 
   // Aggregate unique sizes
@@ -76,11 +87,79 @@ export function mapDbProductToFashion(dbProd: DbProduct): Product {
       ? Array.from(new Set(dbProd.variants.map((v) => v.size)))
       : ["S", "M", "L", "XL"];
 
+  // Resolve department cleanly with strict database authority
+  const rawCat = (dbProd.category?.slug || dbProd.category?.name || "").toLowerCase();
+  const rawTags = (dbProd.tags || []).map((t) => t.toLowerCase());
+  const rawDept = (dbProd.department || "").toLowerCase().trim();
+  const rawName = (dbProd.name || "").toLowerCase();
+
+  let dept: "men" | "women" | "kids";
+  if (rawDept === "women" || rawDept === "kids" || rawDept === "men") {
+    dept = rawDept;
+  } else if (
+    rawCat.includes("women") ||
+    rawTags.includes("women") ||
+    rawName.includes("kurti") ||
+    rawName.includes("women") ||
+    (rawName.includes("dress") && !rawName.includes("baby") && !rawName.includes("kid"))
+  ) {
+    dept = "women";
+  } else if (
+    rawCat.includes("kids") ||
+    rawTags.includes("kids") ||
+    rawName.includes("baby") ||
+    rawName.includes("kid") ||
+    rawName.includes("child") ||
+    rawName.includes("toddler")
+  ) {
+    dept = "kids";
+  } else {
+    dept = "men";
+  }
+
+  // Intelligent category resolution with accurate naming & fallback prevention
+  let resolvedCat: string = (dbProd.category?.slug || dbProd.category?.name || "").toLowerCase().trim();
+  const isExplicitHoodie = rawName.includes("hoodie") || rawName.includes("sweatshirt") || rawTags.some((t) => t.includes("hoodie"));
+
+  if (!resolvedCat || (resolvedCat === "hoodies" && !isExplicitHoodie)) {
+    if (rawName.includes("kurti") || rawName.includes("kurta") || rawTags.some((t) => t.includes("kurti") || t.includes("kurta"))) {
+      resolvedCat = "kurtis";
+    } else if (rawName.includes("dress") || rawName.includes("gown") || rawTags.some((t) => t.includes("dress") || t.includes("gown"))) {
+      resolvedCat = "dresses";
+    } else if (rawName.includes("pant") || rawName.includes("trouser") || rawName.includes("cargo") || rawName.includes("jeans") || rawTags.some((t) => t.includes("pant") || t.includes("trouser") || t.includes("cargo"))) {
+      resolvedCat = "pants";
+    } else if (rawName.includes("t-shirt") || rawName.includes("tee") || rawTags.some((t) => t.includes("t-shirt") || t.includes("tee"))) {
+      resolvedCat = "t-shirts";
+    } else if (rawName.includes("shirt")) {
+      resolvedCat = "shirts";
+    } else if (rawName.includes("jacket") || rawName.includes("outerwear") || rawName.includes("coat") || rawName.includes("bomber") || rawName.includes("puffer") || rawTags.some((t) => t.includes("jacket"))) {
+      resolvedCat = "jackets";
+    } else if (rawName.includes("sneaker") || rawName.includes("shoe") || rawName.includes("footwear") || rawName.includes("boot") || rawTags.some((t) => t.includes("footwear") || t.includes("sneaker"))) {
+      resolvedCat = "footwear";
+    } else if (rawName.includes("rig") || rawName.includes("balaclava") || rawName.includes("mask") || rawName.includes("accessory") || rawName.includes("bag")) {
+      resolvedCat = "accessories";
+    } else {
+      resolvedCat = resolvedCat || "apparel";
+    }
+  }
+
+  const productTypeString = typeof dbProd.product_type === "object" && dbProd.product_type !== null
+    ? (dbProd.product_type as { name?: string }).name || ""
+    : typeof dbProd.product_type === "string"
+    ? dbProd.product_type
+    : "";
+
   return {
     id: dbProd.slug || dbProd.id,
+    dbId: dbProd.id,
     name: dbProd.name,
     subtitle: dbProd.subtitle || "",
-    category: (dbProd.category?.slug as ProductCategory) || "hoodies",
+    category: resolvedCat as ProductCategory,
+    categoryId: dbProd.category_id || undefined,
+    productType: productTypeString || undefined,
+    productTypeId: dbProd.product_type_id || undefined,
+    department: dept,
+    gender: dept,
     price: Number(dbProd.price || dbProd.discounted_price || dbProd.regular_price || 0),
     originalPrice: dbProd.original_price
       ? Number(dbProd.original_price)
@@ -93,12 +172,19 @@ export function mapDbProductToFashion(dbProd: DbProduct): Product {
     sizes: sizes,
     description: dbProd.description || "",
     details: dbProd.details || [],
-    material: dbProd.material || "Premium Atelier Fabric",
+    material: dbProd.material || "",
     fit: dbProd.fit || "Standard Fit",
     weightGsm: dbProd.weight_gsm || undefined,
-    isNew: dbProd.is_new_arrival ?? true,
+    isNew: Boolean(dbProd.is_new_arrival),
     isLimited: dbProd.is_limited ?? false,
     editionCount: dbProd.edition_count || undefined,
+    stock_quantity: dbProd.stock_quantity ?? 0,
+    cost_price: dbProd.cost_price ? Number(dbProd.cost_price) : undefined,
+    sku: dbProd.sku || undefined,
+    brand: dbProd.brand || "NOIR",
+    is_published: dbProd.is_published,
+    is_archived: dbProd.is_archived,
+    tags: dbProd.tags || [],
     rating: Number(dbProd.rating) || 5.0,
     reviewsCount: dbProd.reviews_count || 0,
   };
@@ -169,7 +255,8 @@ export async function getLiveProducts(forceRefresh = false): Promise<Product[]> 
         .from("products")
         .select(`
           *,
-          category:categories(slug, name),
+          category:categories(id, slug, name),
+          product_type:product_types(id, slug, name),
           images:product_images(id, url, is_primary, display_order),
           variants:product_variants(id, color_name, color_hex, size, stock_quantity, sku)
         `)
@@ -223,9 +310,8 @@ export async function getAllAdminProducts(): Promise<DbProduct[]> {
       .from("products")
       .select(`
         *,
-        category:categories(slug, name),
-        product_type:product_types(slug, name),
-        collection:collections(slug, name),
+        category:categories(id, slug, name),
+        product_type:product_types(id, slug, name),
         images:product_images(id, url, is_primary, display_order),
         variants:product_variants(id, color_name, color_hex, size, stock_quantity, sku)
       `)
@@ -262,6 +348,7 @@ export async function createProductInDb(payload: {
   name: string;
   subtitle?: string;
   description?: string;
+  department: "men" | "women" | "kids";
   category_id?: string | null;
   product_type_id?: string | null;
   collection_id?: string | null;
@@ -290,6 +377,11 @@ export async function createProductInDb(payload: {
     .replace(/^-|-$/g, "");
   const uniqueSlug = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
 
+  const cleanDept = payload.department ? (String(payload.department).toLowerCase().trim() as "men" | "women" | "kids") : null;
+  if (!cleanDept || !["men", "women", "kids"].includes(cleanDept)) {
+    return { data: null, error: "A valid department (men, women, kids) must be explicitly selected." };
+  }
+
   try {
     // 1. Insert product record to Supabase
     const { data: newProd, error: prodErr } = await supabase
@@ -299,6 +391,7 @@ export async function createProductInDb(payload: {
         slug: uniqueSlug,
         subtitle: payload.subtitle || null,
         description: payload.description || null,
+        department: cleanDept,
         category_id: payload.category_id || null,
         product_type_id: payload.product_type_id || null,
         collection_id: payload.collection_id || null,
@@ -324,6 +417,28 @@ export async function createProductInDb(payload: {
       .single();
 
     if (prodErr || !newProd) {
+      console.warn("Direct Supabase insert note, attempting Admin API fallback:", prodErr);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const apiRes = await fetch("/api/admin/products", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ ...payload, department: cleanDept }),
+          });
+          const apiJson = await apiRes.json().catch(() => ({}));
+          if (apiRes.ok && apiJson.product) {
+            invalidateProductsCache();
+            return { data: apiJson.product, error: null };
+          }
+        }
+      } catch (apiErr) {
+        console.warn("API route insert fallback note:", apiErr);
+      }
+
       // If RLS blocked insert, persist locally as fail-safe
       if (typeof window !== "undefined") {
         const fallbackProduct: DbProduct = {
@@ -332,6 +447,7 @@ export async function createProductInDb(payload: {
           name: payload.name,
           subtitle: payload.subtitle || null,
           description: payload.description || null,
+          department: cleanDept,
           category_id: payload.category_id || null,
           price: payload.price,
           original_price: payload.regular_price || null,
@@ -411,40 +527,74 @@ export async function createProductInDb(payload: {
 export async function updateProductInDb(
   productId: string,
   payload: Partial<DbProduct> & {
+    department?: "men" | "women" | "kids";
     images?: { url: string; is_primary: boolean; display_order: number }[];
     variants?: { color_name: string; color_hex: string; size: string; stock_quantity: number; sku: string }[];
   }
 ): Promise<{ success: boolean; error: string | null }> {
   try {
+    const updateData: Record<string, unknown> = {
+      name: payload.name,
+      subtitle: payload.subtitle,
+      description: payload.description,
+      category_id: payload.category_id,
+      product_type_id: payload.product_type_id,
+      collection_id: payload.collection_id,
+      price: payload.price,
+      original_price: payload.original_price,
+      regular_price: payload.regular_price,
+      discounted_price: payload.discounted_price,
+      material: payload.material,
+      fit: payload.fit,
+      sku: payload.sku,
+      stock_quantity: payload.stock_quantity,
+      cost_price: payload.cost_price,
+      is_published: payload.is_published,
+      is_featured: payload.is_featured,
+      is_new_arrival: payload.is_new_arrival,
+      is_best_seller: payload.is_best_seller,
+      is_limited: payload.is_limited,
+      tags: payload.tags,
+      details: payload.details,
+    };
+
+    if (payload.department !== undefined) {
+      const cleanDept = String(payload.department).toLowerCase().trim();
+      if (!["men", "women", "kids"].includes(cleanDept)) {
+        return { success: false, error: "Invalid department. Must be 'men', 'women', or 'kids'." };
+      }
+      updateData.department = cleanDept;
+    }
+
+    // 1. Direct Supabase update
     const { error: updateErr } = await supabase
       .from("products")
-      .update({
-        name: payload.name,
-        subtitle: payload.subtitle,
-        description: payload.description,
-        category_id: payload.category_id,
-        product_type_id: payload.product_type_id,
-        collection_id: payload.collection_id,
-        price: payload.price,
-        original_price: payload.original_price,
-        regular_price: payload.regular_price,
-        discounted_price: payload.discounted_price,
-        material: payload.material,
-        fit: payload.fit,
-        sku: payload.sku,
-        stock_quantity: payload.stock_quantity,
-        cost_price: payload.cost_price,
-        is_published: payload.is_published,
-        is_featured: payload.is_featured,
-        is_new_arrival: payload.is_new_arrival,
-        is_best_seller: payload.is_best_seller,
-        is_limited: payload.is_limited,
-        tags: payload.tags,
-        details: payload.details,
-      })
+      .update(updateData)
       .eq("id", productId);
 
     if (updateErr) {
+      console.warn("Direct update error, attempting Admin API fallback:", updateErr);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const apiRes = await fetch(`/api/admin/products/${productId}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ ...updateData, images: payload.images, variants: payload.variants }),
+          });
+          const apiJson = await apiRes.json().catch(() => ({}));
+          if (apiRes.ok && apiJson.success) {
+            invalidateProductsCache();
+            return { success: true, error: null };
+          }
+        }
+      } catch (apiErr) {
+        console.warn("API route update fallback error:", apiErr);
+      }
+
       return { success: false, error: updateErr.message };
     }
 

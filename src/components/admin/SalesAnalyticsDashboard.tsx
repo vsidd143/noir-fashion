@@ -543,11 +543,10 @@ export default function SalesAnalyticsDashboard({
       {/* Floating Status Notification */}
       {bannerFeedback && (
         <div
-          className={`fixed top-6 right-6 z-[300] px-5 py-3 border text-xs font-mono flex items-center gap-3 shadow-2xl backdrop-blur-md transition-all ${
-            bannerFeedback.type === "success"
-              ? "bg-emerald-950/90 border-emerald-500/40 text-emerald-200"
-              : "bg-red-950/90 border-red-500/40 text-red-200"
-          }`}
+          className={`fixed top-6 right-6 z-[300] px-5 py-3 border text-xs font-mono flex items-center gap-3 shadow-2xl backdrop-blur-md transition-all ${bannerFeedback.type === "success"
+            ? "bg-emerald-950/90 border-emerald-500/40 text-emerald-200"
+            : "bg-red-950/90 border-red-500/40 text-red-200"
+            }`}
         >
           {bannerFeedback.type === "success" ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -585,11 +584,10 @@ export default function SalesAnalyticsDashboard({
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`px-3 py-1.5 uppercase tracking-wider text-[11px] font-bold transition-all cursor-pointer ${
-                  period === p
-                    ? "bg-[#c5a46d] text-black shadow-md shadow-[#c5a46d]/20"
-                    : "text-neutral-400 hover:text-white"
-                }`}
+                className={`px-3 py-1.5 uppercase tracking-wider text-[11px] font-bold transition-all cursor-pointer ${period === p
+                  ? "bg-[#c5a46d] text-black shadow-md shadow-[#c5a46d]/20"
+                  : "text-neutral-400 hover:text-white"
+                  }`}
               >
                 {p}
               </button>
@@ -666,11 +664,10 @@ export default function SalesAnalyticsDashboard({
             <button
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id)}
-              className={`px-4 py-2.5 whitespace-nowrap uppercase tracking-wider text-[11px] font-bold transition-all cursor-pointer border ${
-                isActive
-                  ? "bg-[#c5a46d] text-black border-[#c5a46d] shadow-md shadow-[#c5a46d]/20"
-                  : "bg-[#0a0a0a] text-neutral-400 border-white/10 hover:border-white/30 hover:text-white"
-              }`}
+              className={`px-4 py-2.5 whitespace-nowrap uppercase tracking-wider text-[11px] font-bold transition-all cursor-pointer border ${isActive
+                ? "bg-[#c5a46d] text-black border-[#c5a46d] shadow-md shadow-[#c5a46d]/20"
+                : "bg-[#0a0a0a] text-neutral-400 border-white/10 hover:border-white/30 hover:text-white"
+                }`}
             >
               {tab.label}
             </button>
@@ -694,13 +691,12 @@ export default function SalesAnalyticsDashboard({
                 {alerts.map((alt) => (
                   <div
                     key={alt.id}
-                    className={`p-3.5 border font-mono text-xs flex items-start justify-between gap-3 ${
-                      alt.type === "danger"
-                        ? "bg-red-950/30 border-red-500/40 text-red-200"
-                        : alt.type === "warning"
+                    className={`p-3.5 border font-mono text-xs flex items-start justify-between gap-3 ${alt.type === "danger"
+                      ? "bg-red-950/30 border-red-500/40 text-red-200"
+                      : alt.type === "warning"
                         ? "bg-amber-950/30 border-amber-500/40 text-amber-200"
                         : "bg-blue-950/30 border-blue-500/40 text-blue-200"
-                    }`}
+                      }`}
                   >
                     <div>
                       <div className="font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 mb-1">
@@ -853,11 +849,10 @@ export default function SalesAnalyticsDashboard({
                   setOrderTableStatus(st.id);
                   setOrderPage(1);
                 }}
-                className={`px-3.5 py-2 border uppercase tracking-wider text-[11px] font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                  orderTableStatus === st.id
-                    ? "bg-[#c5a46d] text-black border-[#c5a46d]"
-                    : "bg-[#0a0a0a] text-neutral-400 border-white/10 hover:border-white/30 hover:text-white"
-                }`}
+                className={`px-3.5 py-2 border uppercase tracking-wider text-[11px] font-bold flex items-center gap-2 transition-all cursor-pointer ${orderTableStatus === st.id
+                  ? "bg-[#c5a46d] text-black border-[#c5a46d]"
+                  : "bg-[#0a0a0a] text-neutral-400 border-white/10 hover:border-white/30 hover:text-white"
+                  }`}
               >
                 <span>{st.label}</span>
                 <span className="px-1.5 py-0.2 bg-black/40 text-[10px] rounded">{st.count}</span>
@@ -920,7 +915,7 @@ export default function SalesAnalyticsDashboard({
                   <th className="p-3.5">Order ID</th>
                   <th className="p-3.5">Patron / Client</th>
                   <th className="p-3.5">Date (IST)</th>
-                  <th className="p-3.5">Silhouettes</th>
+                  <th className="p-3.5">product</th>
                   <th className="p-3.5">Total Amount</th>
                   <th className="p-3.5">Status</th>
                   <th className="p-3.5">Payment</th>
@@ -978,19 +973,18 @@ export default function SalesAnalyticsDashboard({
                         </td>
                         <td className="p-3.5">
                           <span
-                            className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider inline-block border ${
-                              ord.status === "delivered"
-                                ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-400"
-                                : ord.status === "cancelled"
+                            className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider inline-block border ${ord.status === "delivered"
+                              ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-400"
+                              : ord.status === "cancelled"
                                 ? "bg-red-950/60 border-red-500/40 text-red-400"
                                 : ord.status === "confirmed"
-                                ? "bg-amber-950/60 border-amber-500/40 text-amber-400"
-                                : ord.status === "shipped"
-                                ? "bg-blue-950/60 border-blue-500/40 text-blue-400"
-                                : ord.status === "processing"
-                                ? "bg-purple-950/60 border-purple-500/40 text-purple-400"
-                                : "bg-neutral-900 border-white/20 text-[#c5a46d]"
-                            }`}
+                                  ? "bg-amber-950/60 border-amber-500/40 text-amber-400"
+                                  : ord.status === "shipped"
+                                    ? "bg-blue-950/60 border-blue-500/40 text-blue-400"
+                                    : ord.status === "processing"
+                                      ? "bg-purple-950/60 border-purple-500/40 text-purple-400"
+                                      : "bg-neutral-900 border-white/20 text-[#c5a46d]"
+                              }`}
                           >
                             {ord.status}
                           </span>
@@ -1173,7 +1167,7 @@ export default function SalesAnalyticsDashboard({
                 </span>
               </div>
               <span className="text-[10px] text-[#c5a46d] uppercase tracking-widest">
-                {analyticsProducts.length} Silhouettes in Database
+                {analyticsProducts.length} Products in Database
               </span>
             </div>
 
@@ -1418,17 +1412,16 @@ export default function SalesAnalyticsDashboard({
                       <td className="p-3 text-neutral-400 truncate max-w-[180px]">{c.email}</td>
                       <td className="p-3">
                         <span
-                          className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
-                            c.segment === "Repeat"
-                              ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
-                              : c.segment === "New"
+                          className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${c.segment === "Repeat"
+                            ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
+                            : c.segment === "New"
                               ? "bg-teal-950/60 border-teal-500/40 text-teal-300"
                               : c.segment === "At-Risk"
-                              ? "bg-amber-950/60 border-amber-500/40 text-amber-300"
-                              : c.segment === "Frequent Canceller"
-                              ? "bg-red-950/60 border-red-500/40 text-red-300"
-                              : "bg-neutral-900 border-white/10 text-neutral-400"
-                          }`}
+                                ? "bg-amber-950/60 border-amber-500/40 text-amber-300"
+                                : c.segment === "Frequent Canceller"
+                                  ? "bg-red-950/60 border-red-500/40 text-red-300"
+                                  : "bg-neutral-900 border-white/10 text-neutral-400"
+                            }`}
                         >
                           {c.segment}
                         </span>
@@ -1499,7 +1492,7 @@ export default function SalesAnalyticsDashboard({
                   GARMENT ATTRITION LEADERBOARD
                 </span>
                 <h4 className="text-sm font-bold text-white uppercase font-display tracking-wide">
-                  Most Frequently Cancelled Silhouettes
+                  Most Frequently Cancelled Product
                 </h4>
               </div>
 
@@ -1605,13 +1598,12 @@ export default function SalesAnalyticsDashboard({
                         <td className="p-3 font-bold text-white">{formatPrice(p.profit)}</td>
                         <td className="p-3">
                           <span
-                            className={`font-bold ${
-                              p.margin >= 40
-                                ? "text-emerald-400"
-                                : p.margin >= 20
+                            className={`font-bold ${p.margin >= 40
+                              ? "text-emerald-400"
+                              : p.margin >= 20
                                 ? "text-[#c5a46d]"
                                 : "text-red-400"
-                            }`}
+                              }`}
                           >
                             {p.margin}%
                           </span>
@@ -1652,7 +1644,7 @@ export default function SalesAnalyticsDashboard({
                   <div className="p-4 bg-[#0a0a0a] border border-white/10 space-y-1">
                     <span className="text-[10px] text-neutral-500 uppercase tracking-widest block">Total Runway Units</span>
                     <span className="text-2xl font-black text-white">{totalStockUnits}</span>
-                    <span className="text-[10px] text-neutral-400 block">{analyticsProducts.length} Silhouettes Catalogued</span>
+                    <span className="text-[10px] text-neutral-400 block">{analyticsProducts.length} product Catalogued</span>
                   </div>
 
                   <div className="p-4 bg-[#0a0a0a] border border-white/10 space-y-1">

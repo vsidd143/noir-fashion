@@ -90,7 +90,32 @@ export async function POST(request: Request) {
       );
     }
 
-    // 5. Update status in Supabase
+    // 5. Attempt Atomic cancel_order RPC
+    try {
+      const { data: cancelData, error: cancelError } = await supabase.rpc("cancel_order", {
+        p_order_id: existingOrder.id,
+        p_reason: cleanReason,
+      });
+
+      if (!cancelError && cancelData) {
+        return NextResponse.json({
+          success: true,
+          message: cancelData.message || "Order cancelled successfully.",
+          order: cancelData.order || { ...existingOrder, status: "cancelled" },
+        });
+      }
+
+      if (cancelError && !cancelError.message.includes("schema cache") && cancelError.code !== "PGRST202") {
+        return NextResponse.json(
+          { error: cancelError.message || "Cancellation failed." },
+          { status: 400 }
+        );
+      }
+    } catch (rpcErr) {
+      console.warn("cancel_order RPC fallback:", rpcErr);
+    }
+
+    // 6. Direct Table update fallback if RPC not yet compiled
     const now = new Date().toISOString();
     const { data: updatedOrder, error: updateError } = await supabase
       .from("orders")

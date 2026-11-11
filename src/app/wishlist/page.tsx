@@ -64,10 +64,10 @@ export default function WishlistPage() {
               </p>
             </div>
             <Link
-              href="/collection"
+              href="/new-arrivals"
               className="inline-flex items-center gap-2 px-8 py-3.5 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-xs tracking-widest uppercase font-mono transition-all"
             >
-              <span>Discover Runway Pieces</span>
+              <span>Discover New Arrivals</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </motion.div>

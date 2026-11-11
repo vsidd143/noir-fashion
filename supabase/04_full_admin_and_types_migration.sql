@@ -70,8 +70,8 @@ ON CONFLICT (slug) DO NOTHING;
 
 -- 6. Seed Initial Collections (Dynamic, can be edited/deleted by Admin)
 INSERT INTO public.collections (name, slug, description, display_order) VALUES
-  ('Autumn-Winter Drop', 'autumn-winter', 'Heavyweight structured silhouettes for the colder months', 1),
-  ('Monochrome Monolith', 'monochrome-monolith', 'Minimalist architectural silhouettes in absolute noir', 2),
+  ('Autumn-Winter Drop', 'autumn-winter', 'Heavyweight structured product for the colder months', 1),
+  ('Monochrome Monolith', 'monochrome-monolith', 'Minimalist architectural product in absolute noir', 2),
   ('Cyber Runway', 'cyber-runway', 'High-performance technical fabrics with aerospace hardware', 3)
 ON CONFLICT (slug) DO NOTHING;
 

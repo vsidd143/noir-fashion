@@ -1,3 +1,4 @@
+
 import React, { Suspense } from "react";
 import ProductDetailClient from "./ProductDetailClient";
 import { PRODUCTS } from "@/data/products";
@@ -8,16 +9,27 @@ export function generateStaticParams() {
       slug: product.id,
     }));
   }
-  return [{ slug: "atelier" }];
+
+  return [{ slug: "noir-silhouette" }];
 }
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
 }
 
-export default async function ProductPage({ params }: ProductPageProps) {
+// Resolve URL params inside Suspense
+async function ProductPageContent({
+  params,
+}: ProductPageProps) {
   const { slug } = await params;
 
+  return <ProductDetailClient slug={slug} />;
+}
+
+// Main page component
+export default function ProductPage({
+  params,
+}: ProductPageProps) {
   return (
     <Suspense
       fallback={
@@ -26,7 +38,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </div>
       }
     >
-      <ProductDetailClient slug={slug} />
+      <ProductPageContent params={params} />
     </Suspense>
   );
 }

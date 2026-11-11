@@ -10,7 +10,7 @@ const CAMPAIGN_SCENES = [
   {
     id: "scene1",
     tag: "SCENE 01 // NOCTURNAL METROPOLIS",
-    title: "SHADOW SILHOUETTES",
+    title: "SHADOW product",
     image: "https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=1800&q=85",
     subtitle: "Heavy 480 GSM loopback cotton silhouetted against evening rain.",
   },
@@ -26,7 +26,7 @@ const CAMPAIGN_SCENES = [
     tag: "SCENE 03 // NIGHT ARCHIVE",
     title: "TIMELESS DESIGN",
     image: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1800&q=85",
-    subtitle: "Oversized silhouettes crafted for effortless comfort and presence.",
+    subtitle: "Oversized product crafted for effortless comfort and presence.",
   },
 ];
 
@@ -36,11 +36,11 @@ export default function CampaignSection() {
   const { navigateTo } = usePageTransition();
 
   const handleDiscover = () => {
-    const el = document.getElementById("collection");
+    const el = document.getElementById("editorial-collections");
     if (el) {
       el.scrollIntoView({ behavior: "smooth" });
     } else {
-      navigateTo("/collection");
+      navigateTo("/new-arrivals");
     }
   };
 
@@ -73,9 +73,8 @@ export default function CampaignSection() {
             <button
               key={idx}
               onClick={() => setActiveSceneIndex(idx)}
-              className={`h-1.5 transition-all ${
-                activeSceneIndex === idx ? "w-8 bg-[#c5a46d]" : "w-3 bg-white/20 hover:bg-white/40"
-              }`}
+              className={`h-1.5 transition-all ${activeSceneIndex === idx ? "w-8 bg-[#c5a46d]" : "w-3 bg-white/20 hover:bg-white/40"
+                }`}
             />
           ))}
         </div>
@@ -130,11 +129,10 @@ export default function CampaignSection() {
           <button
             key={scene.id}
             onClick={() => setActiveSceneIndex(idx)}
-            className={`p-4 border text-left transition-all ${
-              activeSceneIndex === idx
+            className={`p-4 border text-left transition-all ${activeSceneIndex === idx
                 ? "border-[#c5a46d] bg-black/60 text-white"
                 : "border-white/10 bg-black/30 text-neutral-400 hover:border-white/30"
-            }`}
+              }`}
           >
             <span className="text-[10px] text-[#c5a46d] block mb-1">0{idx + 1} {"//"} SCENE</span>
             <span className="font-bold uppercase tracking-wider block font-display">

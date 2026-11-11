@@ -100,7 +100,7 @@ export const LOOKBOOK_CHAPTERS = [
     number: "02",
     title: "ARCHITECTURAL PROPORTION",
     subtitle: "Sculpted Volume & Clean Fit",
-    description: "Our silhouettes focus on modern relaxed fits, dropped shoulders, and extended sleeves to give every garment clean lines and complete ease of movement.",
+    description: "Our product focus on modern relaxed fits, dropped shoulders, and extended sleeves to give every garment clean lines and complete ease of movement.",
     quote: "WE DON'T FOLLOW SEASONS. WE CREATE TIMELESS CLASSICS.",
     image: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1400&q=85",
     coords: "28.6139° N, 77.2090° E // DELHI STUDIO",

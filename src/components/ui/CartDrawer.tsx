@@ -49,7 +49,7 @@ export default function CartDrawer() {
           />
 
           {/* Slide-out Drawer */}
-          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
             <motion.div
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
@@ -255,6 +255,14 @@ export default function CartDrawer() {
                   >
                     <span>Proceed to Checkout</span>
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+                  </button>
+
+                  {/* Continue Shopping Button */}
+                  <button
+                    onClick={() => setIsCartOpen(false)}
+                    className="w-full py-2 text-center text-xs font-mono tracking-widest text-neutral-400 hover:text-white uppercase transition-colors cursor-pointer"
+                  >
+                    ← Continue Shopping
                   </button>
 
                   <div className="flex items-center justify-center gap-2 text-[10px] text-neutral-500 uppercase tracking-widest font-mono pt-1">

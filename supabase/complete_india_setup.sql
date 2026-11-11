@@ -83,7 +83,7 @@ CREATE TRIGGER on_auth_user_created
 INSERT INTO public.categories (name, slug, description, display_order) VALUES
   ('Hoodies', 'hoodies', 'Heavyweight French Terry', 1),
   ('Jackets', 'jackets', 'Technical outerwear', 2),
-  ('Cargo Pants', 'pants', 'Combat ripstop silhouettes', 3),
+  ('Cargo Pants', 'pants', 'Combat ripstop product', 3),
   ('T-Shirts', 't-shirts', '320 GSM heavy box tees', 4),
   ('Footwear', 'footwear', 'Architectural sneakers', 5),
   ('Accessories', 'accessories', 'Modular tactical gear', 6)
