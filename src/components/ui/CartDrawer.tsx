@@ -86,7 +86,7 @@ export default function CartDrawer() {
                       Your shopping bag is empty.
                     </h3>
                     <p className="text-xs text-neutral-500 mt-2 max-w-xs">
-                      Explore our edition runway and add limited streetwear to your atelier collection.
+                      Explore our collection and add premium streetwear to your bag.
                     </p>
                     <button
                       onClick={() => setIsCartOpen(false)}

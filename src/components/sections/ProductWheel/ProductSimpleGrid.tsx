@@ -33,7 +33,7 @@ export default function ProductSimpleGrid({ products }: ProductSimpleGridProps) 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 max-w-3xl">
             {products.map((product) => {
               const primaryImg =
-                product.images?.[0] || product.thumbnail || "/images/placeholder-silhouette.png";
+                product.images?.[0] || product.thumbnail || "/images/placeholder-product.png";
               return (
                 <Link
                   key={product.id}

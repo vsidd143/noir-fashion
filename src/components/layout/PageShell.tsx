@@ -9,7 +9,6 @@ import ToastContainer from "@/components/ui/ToastContainer";
 import AuthModal from "@/components/ui/AuthModal";
 import CartDrawer from "@/components/ui/CartDrawer";
 import WishlistDrawer from "@/components/ui/WishlistDrawer";
-import QuickViewModal from "@/components/ui/QuickViewModal";
 import CheckoutModal from "@/components/ui/CheckoutModal";
 
 interface PageShellProps {
@@ -86,7 +85,6 @@ export default function PageShell({
         {/* E-Commerce Drawers & Modals */}
         <CartDrawer />
         <WishlistDrawer />
-        <QuickViewModal />
         <CheckoutModal />
       </div>
     </>

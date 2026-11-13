@@ -18,7 +18,7 @@ if (typeof window !== "undefined") {
 }
 
 export default function NewArrivalsShowcase() {
-  const { addToCart, setQuickViewProduct, isInWishlist, toggleWishlist } = useCart();
+  const { addToCart, isInWishlist, toggleWishlist } = useCart();
   const { setCursor, resetCursor } = useCursor();
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -126,7 +126,7 @@ export default function NewArrivalsShowcase() {
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <p className="text-xs sm:text-sm text-neutral-400 font-sans tracking-wide max-w-xs leading-relaxed hidden md:block">
-              Precision cuts, heavyweight milled cottons, and architectural product recently released from the atelier.
+              Precision cuts, heavyweight milled cottons, and architectural products recently released from the studio.
             </p>
             <Link
               href="/new-arrivals"
@@ -154,7 +154,7 @@ export default function NewArrivalsShowcase() {
                 NEW product IN PRODUCTION
               </h3>
               <p className="text-xs text-neutral-400 font-mono mt-2 leading-relaxed">
-                The next seasonal drop is undergoing finishing in our atelier. Explore our complete archival collection in the interim.
+                The next seasonal drop is undergoing finishing in our workshop. Explore our complete archival collection in the interim.
               </p>
             </div>
             <div className="pt-2">
@@ -216,13 +216,6 @@ export default function NewArrivalsShowcase() {
                       </span>
 
                       <div className="ml-auto pointer-events-auto flex items-center gap-1.5">
-                        <button
-                          onClick={() => setQuickViewProduct(product)}
-                          className="p-2 bg-black/75 hover:bg-[#c5a46d] hover:text-black text-white rounded-full border border-white/15 transition-all cursor-pointer shadow-lg"
-                          aria-label="Quick View"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
                         <button
                           onClick={() => toggleWishlist(product.id, product)}
                           className={`p-2 rounded-full border transition-all cursor-pointer shadow-lg ${isSaved

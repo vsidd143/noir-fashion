@@ -12,7 +12,7 @@ import { Eye, ShoppingBag, Heart, ArrowRight } from "lucide-react";
 type FilterTab = "all" | "new" | "men" | "women" | "kids";
 
 export default function CuratedProductShowcase() {
-  const { addToCart, setQuickViewProduct, isInWishlist, toggleWishlist } = useCart();
+  const { addToCart, isInWishlist, toggleWishlist } = useCart();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -157,13 +157,6 @@ export default function CuratedProductShowcase() {
                       )}
 
                       <div className="ml-auto pointer-events-auto flex items-center gap-1.5">
-                        <button
-                          onClick={() => setQuickViewProduct(product)}
-                          className="p-1.5 bg-white/90 hover:bg-white text-[#161616] hover:text-[#1A3B8B] border border-[#E5E0D8] transition-colors cursor-pointer shadow-sm"
-                          aria-label="Quick View"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
                         <button
                           onClick={() => toggleWishlist(product.id, product)}
                           className={`p-1.5 border transition-colors cursor-pointer shadow-sm ${

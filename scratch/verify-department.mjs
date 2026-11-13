@@ -5,7 +5,7 @@ function mapDbProductToFashion(dbProd) {
       ? dbProd.images
           .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
           .map((img) => img.url)
-      : ["/images/placeholder-silhouette.png"];
+      : ["/images/placeholder-product.png"];
 
   const rawCat = (dbProd.category?.slug || dbProd.category?.name || "").toLowerCase();
   const rawTags = (dbProd.tags || []).map((t) => t.toLowerCase());

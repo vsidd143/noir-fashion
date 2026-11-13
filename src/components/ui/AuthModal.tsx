@@ -131,7 +131,7 @@ export default function AuthModal() {
             setErrorMsg(error.message);
           }
         } else {
-          setSuccessMsg("Atelier account successfully registered! You can now sign in.");
+          setSuccessMsg("Account successfully registered! You can now sign in.");
           setTimeout(() => {
             setAuthView("login");
           }, 1800);
@@ -197,11 +197,11 @@ export default function AuthModal() {
           {/* Header */}
           <div className="text-center mb-6">
             <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#c5a46d] block mb-1">
-              NOIR ATELIER // ACCESS
+              NOIR STUDIO // ACCESS
             </span>
             <h3 className="text-2xl font-black uppercase tracking-wider text-white font-display">
               {authView === "login" && "Client Sign In"}
-              {authView === "register" && "Create Atelier Account"}
+              {authView === "register" && "Create Account"}
               {authView === "magic" && "Magic Link Access"}
               {authView === "forgot" && "Recover Password"}
             </h3>
@@ -298,7 +298,7 @@ export default function AuthModal() {
                       <input
                         type="email"
                         required
-                        placeholder="client@atelier-noir.in"
+                        placeholder="client@noir-studio.in"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full bg-black border border-white/15 pl-10 pr-4 py-2.5 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-[#c5a46d]"

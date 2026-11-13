@@ -1057,7 +1057,9 @@ export default function SalesAnalyticsDashboard({
             <div className="p-4 bg-[#0a0a0a] border border-white/10 space-y-1 font-mono">
               <span className="text-[10px] text-neutral-500 uppercase tracking-widest block">Gross Sales Realized</span>
               <span className="text-2xl font-black text-emerald-400">{formatPrice(profit.grossSalesRevenue)}</span>
-              <span className="text-[10px] text-neutral-400 block">Exclusively delivered Cash on Delivery</span>
+              <span className="text-[10px] text-neutral-400 block truncate">
+                Online: {formatPrice(profit.onlineSalesRevenue || 0)} · COD: {formatPrice(profit.offlineSalesRevenue || 0)}
+              </span>
             </div>
 
             <div className="p-4 bg-[#0a0a0a] border border-white/10 space-y-1 font-mono">
@@ -1129,7 +1131,9 @@ export default function SalesAnalyticsDashboard({
             <div className="p-5 bg-[#0a0a0a] border border-white/10 space-y-1">
               <span className="text-[10px] text-neutral-400 uppercase tracking-widest">1. Gross Realized Sales</span>
               <div className="text-2xl font-black text-white">{formatPrice(profit.grossSalesRevenue)}</div>
-              <span className="text-[10px] text-neutral-500">Delivered orders only</span>
+              <span className="text-[10px] text-neutral-500">
+                Online ({formatPrice(profit.onlineSalesRevenue || 0)}) + COD ({formatPrice(profit.offlineSalesRevenue || 0)})
+              </span>
             </div>
 
             <div className="p-5 bg-[#0a0a0a] border border-white/10 space-y-1">
@@ -1163,7 +1167,7 @@ export default function SalesAnalyticsDashboard({
                   Internal Product Manufacturing Cost Manager
                 </h3>
                 <span className="text-[11px] text-neutral-400">
-                  Manage confidential atelier cost prices. Selling prices remain customer-facing.
+                  Manage confidential internal cost prices. Selling prices remain customer-facing.
                 </span>
               </div>
               <span className="text-[10px] text-[#c5a46d] uppercase tracking-widest">
@@ -1175,7 +1179,7 @@ export default function SalesAnalyticsDashboard({
               <table className="w-full text-left text-xs">
                 <thead className="bg-black text-[10px] text-neutral-400 uppercase tracking-widest">
                   <tr>
-                    <th className="p-3">Silhouette</th>
+                    <th className="p-3">Product</th>
                     <th className="p-3">Category</th>
                     <th className="p-3">Selling Price (Retail)</th>
                     <th className="p-3">Cost Price (COGS)</th>
@@ -1480,7 +1484,7 @@ export default function SalesAnalyticsDashboard({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <HorizontalBarRankingChart
               title="Cancellation Reasons Breakdown"
-              subtitle="STANDARDIZED ATELIER REASONS"
+              subtitle="STANDARDIZED RETURN REASONS"
               items={cancellationReasonsBarData}
               emptyMessage="Zero cancellations logged in this period."
             />
@@ -1500,7 +1504,7 @@ export default function SalesAnalyticsDashboard({
                 <table className="w-full text-left text-xs">
                   <thead className="bg-black text-[10px] text-neutral-400 uppercase tracking-widest">
                     <tr>
-                      <th className="p-2.5">Silhouette</th>
+                      <th className="p-2.5">Product</th>
                       <th className="p-2.5">Cancelled Units</th>
                       <th className="p-2.5">Lost Value</th>
                       <th className="p-2.5">Cancel Rate</th>
@@ -1550,7 +1554,7 @@ export default function SalesAnalyticsDashboard({
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-white">
-                  Runway Silhouette Profitability & Unit Sales
+                  Product Profitability & Unit Sales
                 </h3>
                 <span className="text-[11px] text-neutral-400">
                   Delivered revenue, production cost, profit margins, and cancellation rate per garment.
@@ -1569,7 +1573,7 @@ export default function SalesAnalyticsDashboard({
               <table className="w-full text-left text-xs">
                 <thead className="bg-black text-[10px] text-neutral-400 uppercase tracking-widest">
                   <tr>
-                    <th className="p-3">Silhouette</th>
+                    <th className="p-3">Product</th>
                     <th className="p-3">Retail Price</th>
                     <th className="p-3">Units Sold</th>
                     <th className="p-3">Gross Revenue</th>
@@ -1669,13 +1673,13 @@ export default function SalesAnalyticsDashboard({
                 {/* Stock Table */}
                 <div className="p-6 bg-[#0a0a0a] border border-white/10 space-y-4">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-white border-b border-white/10 pb-3">
-                    Atelier Stock Holdings & Restock Velocity
+                    Store Stock Holdings & Restock Velocity
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-black text-[10px] text-neutral-400 uppercase tracking-widest">
                         <tr>
-                          <th className="p-3">Silhouette</th>
+                          <th className="p-3">Product</th>
                           <th className="p-3">Available Units</th>
                           <th className="p-3">Unit Cost</th>
                           <th className="p-3">Total Cost Value</th>
@@ -1763,10 +1767,10 @@ export default function SalesAnalyticsDashboard({
             {/* 2. Delivered Orders CSV */}
             <div className="p-5 bg-[#0a0a0a] border border-white/10 space-y-3 flex flex-col justify-between">
               <div>
-                <span className="text-[10px] text-emerald-400 uppercase tracking-widest block">FULFILLED COD</span>
+                <span className="text-[10px] text-emerald-400 uppercase tracking-widest block">FULFILLED ORDERS</span>
                 <h4 className="text-sm font-bold text-white uppercase">Delivered Orders CSV</h4>
                 <p className="text-[11px] text-neutral-400 mt-1">
-                  All successfully delivered Cash on Delivery orders constituting realized gross business revenue.
+                  All successfully delivered orders (Online & COD) constituting realized business revenue.
                 </p>
               </div>
               <button
@@ -1817,7 +1821,7 @@ export default function SalesAnalyticsDashboard({
             {/* 5. Processing Orders CSV */}
             <div className="p-5 bg-[#0a0a0a] border border-white/10 space-y-3 flex flex-col justify-between">
               <div>
-                <span className="text-[10px] text-purple-400 uppercase tracking-widest block">ATELIER PREPARATION</span>
+                <span className="text-[10px] text-purple-400 uppercase tracking-widest block">ORDER PREPARATION</span>
                 <h4 className="text-sm font-bold text-white uppercase">Processing Orders CSV</h4>
                 <p className="text-[11px] text-neutral-400 mt-1">
                   Confirmed orders currently being tailored, inspected, and packaged for dispatch.
@@ -1856,7 +1860,7 @@ export default function SalesAnalyticsDashboard({
                 <span className="text-[10px] text-amber-400 uppercase tracking-widest block">VERIFIED ORDERS</span>
                 <h4 className="text-sm font-bold text-white uppercase">Confirmed Orders CSV</h4>
                 <p className="text-[11px] text-neutral-400 mt-1">
-                  Orders officially verified by patron or admin ready for atelier queue.
+                  Orders officially verified by patron or admin ready for fulfillment queue.
                 </p>
               </div>
               <button
@@ -1930,7 +1934,7 @@ export default function SalesAnalyticsDashboard({
                 <span className="text-[10px] text-purple-400 uppercase tracking-widest block">CATALOGUE AUDIT</span>
                 <h4 className="text-sm font-bold text-white uppercase">Product Performance CSV</h4>
                 <p className="text-[11px] text-neutral-400 mt-1">
-                  Sales units, gross revenue, product profit margins, and return/cancellation rates per silhouette.
+                  Sales units, gross revenue, product profit margins, and return/cancellation rates per product.
                 </p>
               </div>
               <button

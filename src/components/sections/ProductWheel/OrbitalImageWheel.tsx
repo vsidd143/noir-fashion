@@ -311,7 +311,7 @@ export default function OrbitalImageWheel({ products }: OrbitalImageWheelProps) 
               const primaryImg =
                 slot.product.images?.[0] ||
                 slot.product.thumbnail ||
-                "/images/placeholder-silhouette.png";
+                "/images/placeholder-product.png";
 
               return (
                 <div
@@ -322,7 +322,7 @@ export default function OrbitalImageWheel({ products }: OrbitalImageWheelProps) 
                   tabIndex={slot.isRepeated ? -1 : 0}
                   aria-hidden={slot.isRepeated ? "true" : undefined}
                   role="button"
-                  aria-label={slot.isRepeated ? undefined : `View silhouette: ${slot.product.name}`}
+                  aria-label={slot.isRepeated ? undefined : `View product: ${slot.product.name}`}
                   onClick={() => handleSelectProduct(slot.product)}
                   onFocus={() => {
                     // When keyboard Tab focuses a real product, smooth scroll to bring it to center
@@ -368,7 +368,7 @@ export default function OrbitalImageWheel({ products }: OrbitalImageWheelProps) 
                       priority={i < 4}
                       onError={(e) => {
                         const target = e.currentTarget as HTMLImageElement;
-                        target.src = "/images/placeholder-silhouette.png";
+                        target.src = "/images/placeholder-product.png";
                       }}
                       onLoad={() => {
                         if (i === slots.length - 1) {

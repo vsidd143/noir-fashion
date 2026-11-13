@@ -28,7 +28,7 @@ async function authenticateAdminRequest(request: Request) {
   const isAdmin = (profile?.role === "admin" && !profile?.is_blocked) || isEmailAdmin;
 
   if (!isAdmin) {
-    return { user, isAdmin: false, error: "Forbidden: Master Atelier Administrator privileges required.", status: 403 };
+    return { user, isAdmin: false, error: "Forbidden: Master Administrator privileges required.", status: 403 };
   }
 
   return { user, isAdmin: true, error: null, status: 200 };

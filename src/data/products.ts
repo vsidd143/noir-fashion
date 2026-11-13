@@ -94,7 +94,7 @@ export const LOOKBOOK_CHAPTERS = [
     description: "We strip away clutter to reveal clean structure. Black is not the absence of color—it is timeless confidence, tailored for the modern urban landscape.",
     quote: "NOT JUST CLOTHING. IT'S AN ATTITUDE.",
     image: "https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=1400&q=85",
-    coords: "19.0760° N, 72.8777° E // MUMBAI ATELIER",
+    coords: "19.0760° N, 72.8777° E // MUMBAI STUDIO",
   },
   {
     number: "02",

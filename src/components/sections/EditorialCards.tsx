@@ -25,7 +25,7 @@ const EDITORIAL_CARDS: EditorialCardItem[] = [
   {
     id: "men",
     category: "MEN",
-    title: "MEN'S ATELIER",
+    title: "MEN'S COLLECTION",
     subtitle: "Heavyweight hoodies, tailored outerwear & structural trousers.",
     href: "/men",
     image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT8ExBCJe9jANyqQmr7-fZuaDKXMOUwE6BHvdjjxOwu5Q&s=10",

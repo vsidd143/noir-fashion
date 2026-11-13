@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { supabase } from "@/lib/supabase";
 import { getLiveProducts } from "@/lib/products-service";
-import { Product } from "@/types/fashion";
+import { Product, ProductColor } from "@/types/fashion";
 import { formatPrice } from "@/lib/currency";
 import PageShell from "@/components/layout/PageShell";
 import { confirmCustomerOrder, cancelCustomerOrder } from "@/lib/orders-service";
@@ -29,6 +29,9 @@ import {
   Edit,
   Star,
   ArrowRight,
+  Truck,
+  ShoppingBag,
+  RotateCcw,
 } from "lucide-react";
 
 type OrderRecord = {
@@ -57,7 +60,7 @@ type OrderRecord = {
     postalCode?: string;
     addressType?: string;
   };
-  items?: { product_name: string; product_image: string; color_name: string; size: string; quantity: number; unit_price: number }[];
+  items?: { product_id?: string; product_name: string; product_image: string; color_name: string; size: string; quantity: number; unit_price: number }[];
 };
 
 const INDIAN_STATES = [
@@ -88,15 +91,58 @@ type AddressRecord = {
   created_at?: string;
 };
 
+function formatCleanAddress(addr?: OrderRecord["shipping_address"]): string {
+  if (!addr) return "Address on file";
+  const raw = [
+    addr.address,
+    addr.city,
+    addr.state,
+    addr.postalCode ? `PIN ${addr.postalCode}` : "",
+    addr.country || "India",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const tokens = raw
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  const deduplicated: string[] = [];
+  for (const token of tokens) {
+    const lower = token.toLowerCase();
+    if (!deduplicated.some((existing) => existing.toLowerCase() === lower)) {
+      deduplicated.push(token);
+    }
+  }
+
+  return deduplicated.join(", ") || "India";
+}
+
 export default function UserDashboard() {
   const { user, profile, isAdmin, isLoading, openAuthModal, refreshProfile, signOut } = useAuth();
-  const { wishlist, toggleWishlist, addToCart } = useCart();
+  const { wishlist, toggleWishlist, addToCart, setIsCartOpen } = useCart();
 
   const [activeTab, setActiveTab] = useState<"orders" | "profile" | "addresses" | "wishlist" | "security">("orders");
+  const [orderFilter, setOrderFilter] = useState<"all" | "active" | "delivered" | "cancelled">("all");
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [addresses, setAddresses] = useState<AddressRecord[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+
+  // Computed order slices for separate filtering
+  const activeOrders = orders.filter((o) => ["pending", "confirmed", "processing", "shipped"].includes(o.status));
+  const deliveredOrders = orders.filter((o) => o.status === "delivered");
+  const cancelledOrders = orders.filter((o) => o.status === "cancelled" || o.status === "refunded");
+
+  const displayedOrders =
+    orderFilter === "active"
+      ? activeOrders
+      : orderFilter === "delivered"
+      ? deliveredOrders
+      : orderFilter === "cancelled"
+      ? cancelledOrders
+      : orders;
 
   // Order Confirmation & Cancellation Dialog States
   const [confirmModalOrder, setConfirmModalOrder] = useState<OrderRecord | null>(null);
@@ -172,12 +218,54 @@ export default function UserDashboard() {
     let isMounted = true;
 
     async function loadUserData() {
+      // Trigger background purge of old demo orders from database
+      fetch("/api/orders/purge-demo", { method: "POST" }).catch(() => {});
+
+      const isDemoItem = (name?: string) => {
+        if (!name) return false;
+        const lower = name.toLowerCase();
+        return (
+          lower.includes("phantom") ||
+          lower.includes("monolith") ||
+          lower.includes("solstice") ||
+          lower.includes("shadow runner") ||
+          lower.includes("exoskeleton") ||
+          lower.includes("cipher") ||
+          lower.includes("cyber mask") ||
+          lower.includes("atelier")
+        );
+      };
+
+      const cleanOrderList = (orderList: OrderRecord[]): OrderRecord[] => {
+        return (orderList || [])
+          .filter((o) => {
+            if (o.courier_name && o.courier_name.toLowerCase().includes("atelier")) return false;
+            if (o.tracking_number && o.tracking_number.toUpperCase().includes("DHL-EXP")) return false;
+            if (o.items && o.items.length > 0) {
+              const hasReal = o.items.some((i) => !isDemoItem(i.product_name));
+              if (!hasReal) return false;
+            }
+            return true;
+          })
+          .map((o) => {
+            const cleanItems = (o.items || []).filter((i) => !isDemoItem(i.product_name));
+            return {
+              ...o,
+              items: cleanItems.length > 0 ? cleanItems : o.items,
+              courier_name: (o.courier_name || "Blue Dart Express")
+                .replace(/atelier/gi, "Express")
+                .replace(/dhl express/gi, "Blue Dart Express"),
+            };
+          });
+      };
+
       // 1. Load orders
       let localOrders: OrderRecord[] = [];
       try {
         const stored = localStorage.getItem("noir_local_orders");
         if (stored) {
-          localOrders = JSON.parse(stored);
+          const parsed = JSON.parse(stored);
+          localOrders = cleanOrderList(Array.isArray(parsed) ? parsed : []);
         }
       } catch {
         // safe fallback
@@ -188,21 +276,26 @@ export default function UserDashboard() {
           .from("orders")
           .select(`
             *,
-            items:order_items(product_name, product_image, color_name, size, quantity, unit_price)
+            items:order_items(product_id, product_name, product_image, color_name, size, quantity, unit_price)
           `)
           .order("created_at", { ascending: false });
 
         if (!isMounted) return;
 
+        let finalOrders: OrderRecord[] = [];
         if (!error && data && data.length > 0) {
-          const remoteIds = new Set(data.map((d: { order_number: string }) => d.order_number));
+          const cleanRemote = cleanOrderList(data as OrderRecord[]);
+          const remoteIds = new Set(cleanRemote.map((d) => d.order_number));
           const filteredLocal = localOrders.filter((o) => !remoteIds.has(o.order_number));
-          setOrders([...filteredLocal, ...data] as OrderRecord[]);
+          finalOrders = cleanOrderList([...filteredLocal, ...cleanRemote]);
         } else if (localOrders.length > 0) {
-          setOrders(localOrders);
-        } else {
-          setOrders([]);
+          finalOrders = localOrders;
         }
+
+        setOrders(finalOrders);
+        try {
+          localStorage.setItem("noir_local_orders", JSON.stringify(finalOrders));
+        } catch {}
       } catch {
         if (isMounted) {
           setOrders(localOrders);
@@ -309,6 +402,101 @@ export default function UserDashboard() {
     setTimeout(() => setActionFeedback(null), 5000);
   };
 
+  const handleBuyAgainItem = (item: NonNullable<OrderRecord["items"]>[number]) => {
+    const matched =
+      allProducts.find(
+        (p) =>
+          (item.product_id && (p.id === item.product_id || p.dbId === item.product_id)) ||
+          p.name.toLowerCase() === item.product_name?.toLowerCase()
+      ) || null;
+
+    const colorObj: ProductColor =
+      matched?.colors?.find((c) => c.name.toLowerCase() === item.color_name?.toLowerCase()) ||
+      matched?.colors?.[0] || {
+        name: item.color_name || "Classic",
+        hex: "#000000",
+        bgClass: "bg-black",
+      };
+
+    const fallbackSlug = (item.product_name || "piece")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    const productToCart: Product = matched || {
+      id: item.product_id || `prod-${fallbackSlug}`,
+      name: item.product_name || "Product",
+      subtitle: item.product_name || "Product",
+      price: item.unit_price,
+      originalPrice: item.unit_price,
+      images: [item.product_image || "/images/placeholder-product.png"],
+      thumbnail: item.product_image || "/images/placeholder-product.png",
+      category: "all",
+      description: item.product_name || "",
+      details: ["Authentic NOIR piece"],
+      material: "Premium Cotton",
+      fit: "Regular",
+      colors: [colorObj],
+      sizes: [item.size || "M"],
+      isNew: false,
+      rating: 5,
+      reviewsCount: 1,
+    };
+
+    addToCart(productToCart, colorObj, item.size || "M", item.quantity || 1);
+    showFeedback("success", `"${item.product_name}" added to your bag. Ready to order!`);
+    setIsCartOpen(true);
+  };
+
+  const handleBuyAgainOrder = (order: OrderRecord) => {
+    if (!order.items || order.items.length === 0) {
+      showFeedback("error", "No items found in this order to reorder.");
+      return;
+    }
+
+    order.items.forEach((item) => {
+      const matched =
+        allProducts.find(
+          (p) =>
+            (item.product_id && (p.id === item.product_id || p.dbId === item.product_id)) ||
+            p.name.toLowerCase() === item.product_name?.toLowerCase()
+        ) || null;
+
+      const colorObj: ProductColor =
+        matched?.colors?.find((c) => c.name.toLowerCase() === item.color_name?.toLowerCase()) ||
+        matched?.colors?.[0] || {
+          name: item.color_name || "Classic",
+          hex: "#000000",
+          bgClass: "bg-black",
+        };
+
+      const productToCart: Product = matched || {
+        id: item.product_id || `prod-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: item.product_name || "Product",
+        subtitle: item.product_name || "Product",
+        price: item.unit_price,
+        originalPrice: item.unit_price,
+        images: [item.product_image || "/images/placeholder-product.png"],
+        thumbnail: item.product_image || "/images/placeholder-product.png",
+        category: "all",
+        description: item.product_name || "",
+        details: ["Authentic NOIR piece"],
+        material: "Premium Cotton",
+        fit: "Regular",
+        colors: [colorObj],
+        sizes: [item.size || "M"],
+        isNew: false,
+        rating: 5,
+        reviewsCount: 1,
+      };
+
+      addToCart(productToCart, colorObj, item.size || "M", item.quantity || 1);
+    });
+
+    showFeedback("success", `All items from Order #${order.order_number} added to your bag.`);
+    setIsCartOpen(true);
+  };
+
   const handleExecuteConfirm = async () => {
     if (!confirmModalOrder) return;
     setIsConfirming(true);
@@ -330,7 +518,7 @@ export default function UserDashboard() {
         );
         showFeedback(
           "success",
-          `Order #${confirmModalOrder.order_number} confirmed successfully. Our atelier has queued your order for production & express dispatch.`
+          `Order #${confirmModalOrder.order_number} confirmed successfully. Our workshop has queued your order for production & express dispatch.`
         );
         setConfirmModalOrder(null);
       } else {
@@ -372,6 +560,29 @@ export default function UserDashboard() {
               : o
           )
         );
+        try {
+          const stored = localStorage.getItem("noir_local_orders");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+              const updated = parsed.map((o: OrderRecord) =>
+                o.id === cancelModalOrder.id || o.order_number === cancelModalOrder.order_number
+                  ? {
+                      ...o,
+                      status: "cancelled",
+                      cancelled_at: now,
+                      cancellation_reason: chosenReason,
+                      cancellation_notes: additionalNotes,
+                      updated_at: now,
+                    }
+                  : o
+              );
+              localStorage.setItem("noir_local_orders", JSON.stringify(updated));
+            }
+          }
+        } catch {
+          // ignore
+        }
         showFeedback(
           "success",
           `Order #${cancelModalOrder.order_number} has been cancelled successfully.`
@@ -437,7 +648,7 @@ export default function UserDashboard() {
       if (error) {
         setProfileMsg({ type: "error", text: `Database error: ${error.message}` });
       } else {
-        setProfileMsg({ type: "success", text: "Atelier patron profile updated and saved to Supabase Vault." });
+        setProfileMsg({ type: "success", text: "Customer profile updated and saved." });
         await refreshProfile();
       }
     } catch (err: unknown) {
@@ -830,14 +1041,57 @@ export default function UserDashboard() {
               {/* Sidebar Navigation (3 cols) — Horizontal scroll on mobile, vertical sidebar on desktop */}
               <div className="lg:col-span-3 bg-[#0a0a0a] border border-white/10 p-2 sm:p-4 flex lg:flex-col overflow-x-auto gap-1.5 sm:gap-1 no-scrollbar">
                 <button
-                  onClick={() => setActiveTab("orders")}
-                  className={`flex items-center gap-2.5 px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs font-mono uppercase tracking-wider transition-all text-left whitespace-nowrap shrink-0 lg:w-full ${activeTab === "orders"
+                  onClick={() => {
+                    setActiveTab("orders");
+                    setOrderFilter("all");
+                  }}
+                  className={`flex items-center justify-between gap-2.5 px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs font-mono uppercase tracking-wider transition-all text-left whitespace-nowrap shrink-0 lg:w-full ${
+                    activeTab === "orders" && orderFilter !== "cancelled"
                       ? "bg-[#c5a46d] text-black font-bold shadow-md shadow-[#c5a46d]/20"
                       : "text-neutral-400 hover:text-white hover:bg-neutral-900"
-                    }`}
+                  }`}
                 >
-                  <Package className="w-4 h-4 shrink-0" />
-                  <span>My Orders ({orders.length})</span>
+                  <div className="flex items-center gap-2.5">
+                    <Package className="w-4 h-4 shrink-0" />
+                    <span>My Orders</span>
+                  </div>
+                  <span
+                    className={`text-[11px] px-1.5 py-0.5 rounded font-mono ${
+                      activeTab === "orders" && orderFilter !== "cancelled"
+                        ? "bg-black/20 text-black font-bold"
+                        : "bg-white/10 text-neutral-300"
+                    }`}
+                  >
+                    {orders.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("orders");
+                    setOrderFilter("cancelled");
+                  }}
+                  className={`flex items-center justify-between gap-2.5 px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs font-mono uppercase tracking-wider transition-all text-left whitespace-nowrap shrink-0 lg:w-full ${
+                    activeTab === "orders" && orderFilter === "cancelled"
+                      ? "bg-red-500 text-white font-bold shadow-md shadow-red-500/20"
+                      : "text-neutral-400 hover:text-red-400 hover:bg-neutral-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <RotateCcw className="w-4 h-4 shrink-0 text-red-400" />
+                    <span>Cancelled Orders</span>
+                  </div>
+                  <span
+                    className={`text-[11px] px-1.5 py-0.5 rounded font-mono ${
+                      activeTab === "orders" && orderFilter === "cancelled"
+                        ? "bg-black/30 text-white font-bold"
+                        : cancelledOrders.length > 0
+                        ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                        : "bg-white/10 text-neutral-400"
+                    }`}
+                  >
+                    {cancelledOrders.length}
+                  </span>
                 </button>
 
                 <button
@@ -890,14 +1144,65 @@ export default function UserDashboard() {
                 {/* TAB 1: ORDERS & TRACKING */}
                 {activeTab === "orders" && (
                   <div className="space-y-6">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
                       <div>
                         <h3 className="text-xl font-bold uppercase font-display text-white">
-                          My Orders
+                          {orderFilter === "cancelled" ? "Cancelled Orders" : "My Orders"}
                         </h3>
                         <p className="text-xs text-neutral-400 mt-0.5">
-                          Track live courier dispatch, verify orders, and review past atelier acquisitions.
+                          {orderFilter === "cancelled"
+                            ? "Review previously cancelled orders and reorder items in one click."
+                            : "Track live courier dispatch, verify orders, and review past purchases."}
                         </p>
+                      </div>
+
+                      {/* Filter Options */}
+                      <div className="flex items-center gap-1.5 p-1 bg-black/80 border border-white/10 rounded-lg overflow-x-auto text-[11px] font-mono shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setOrderFilter("all")}
+                          className={`px-3 py-1.5 rounded uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                            orderFilter === "all"
+                              ? "bg-[#c5a46d] text-black font-bold shadow-xs"
+                              : "text-neutral-400 hover:text-white"
+                          }`}
+                        >
+                          All ({orders.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOrderFilter("active")}
+                          className={`px-3 py-1.5 rounded uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                            orderFilter === "active"
+                              ? "bg-[#c5a46d] text-black font-bold shadow-xs"
+                              : "text-neutral-400 hover:text-white"
+                          }`}
+                        >
+                          Active ({activeOrders.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOrderFilter("delivered")}
+                          className={`px-3 py-1.5 rounded uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                            orderFilter === "delivered"
+                              ? "bg-[#c5a46d] text-black font-bold shadow-xs"
+                              : "text-neutral-400 hover:text-white"
+                          }`}
+                        >
+                          Delivered ({deliveredOrders.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOrderFilter("cancelled")}
+                          className={`px-3 py-1.5 rounded uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                            orderFilter === "cancelled"
+                              ? "bg-red-500 text-white font-bold shadow-xs"
+                              : "text-red-400/90 hover:text-red-300"
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                          Cancelled ({cancelledOrders.length})
+                        </button>
                       </div>
                     </div>
 
@@ -949,8 +1254,35 @@ export default function UserDashboard() {
                           Explore New Arrivals
                         </Link>
                       </div>
+                    ) : displayedOrders.length === 0 ? (
+                      <div className="py-16 text-center space-y-4 border border-white/5 rounded-xl bg-white/[0.01]">
+                        <div className="w-12 h-12 rounded-full border border-white/10 flex items-center justify-center mx-auto text-neutral-500">
+                          {orderFilter === "cancelled" ? (
+                            <RotateCcw className="w-5 h-5 text-red-400" />
+                          ) : (
+                            <Package className="w-5 h-5 text-[#c5a46d]" />
+                          )}
+                        </div>
+                        <p className="text-sm font-display uppercase tracking-widest text-neutral-300">
+                          {orderFilter === "cancelled"
+                            ? "No Cancelled Orders Found"
+                            : `No ${orderFilter} Orders`}
+                        </p>
+                        <p className="text-xs text-neutral-400 font-mono max-w-sm mx-auto">
+                          {orderFilter === "cancelled"
+                            ? "You do not have any cancelled or refunded orders. All placed orders are currently active or completed."
+                            : `You do not have any orders matching the "${orderFilter}" filter.`}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setOrderFilter("all")}
+                          className="inline-block px-5 py-2 bg-white/10 hover:bg-white/20 text-white font-mono font-bold text-xs uppercase tracking-wider transition-all rounded cursor-pointer"
+                        >
+                          View All Orders ({orders.length})
+                        </button>
+                      </div>
                     ) : (
-                      orders.map((order) => {
+                      displayedOrders.map((order) => {
                         const isPending = order.status === "pending";
                         const isConfirmed = order.status === "confirmed";
                         const isCancelled = order.status === "cancelled" || order.status === "refunded";
@@ -962,58 +1294,59 @@ export default function UserDashboard() {
                         return (
                           <div
                             key={order.id || order.order_number}
-                            className="bg-neutral-950 border border-white/10 p-6 space-y-6 relative transition-colors"
+                            className="bg-[#121212] border border-white/10 hover:border-white/20 rounded-xl p-5 sm:p-7 space-y-6 shadow-xl transition-all"
                           >
                             {/* Order Header */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
                               <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[11px] font-mono font-bold tracking-widest text-[#c5a46d] uppercase">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-sm font-mono font-bold tracking-wider text-white">
                                     ORDER #{order.order_number}
                                   </span>
                                   {isConfirmed && (
-                                    <span className="px-2 py-0.5 text-[9px] font-mono uppercase bg-[#c5a46d]/20 text-[#c5a46d] border border-[#c5a46d]/40">
+                                    <span className="px-2.5 py-0.5 text-[10px] font-mono uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-full font-medium">
                                       Verified
                                     </span>
                                   )}
                                 </div>
-                                <span className="block text-xs font-mono text-neutral-400 mt-1">
+                                <span className="block text-xs text-neutral-400 mt-1 font-body">
                                   Placed on {new Date(order.created_at).toLocaleDateString("en-IN", {
                                     year: "numeric",
                                     month: "short",
                                     day: "numeric",
-                                  })} · Total: {formatPrice(order.total_amount)} (Cash on Delivery)
+                                  })} · Total: <span className="font-mono font-bold text-white">{formatPrice(order.total_amount)}</span> ({order.payment_method || "Cash on Delivery"})
                                 </span>
                               </div>
 
-                              <div className="flex items-center gap-3">
+                              <div>
                                 <span
-                                  className={`px-3 py-1 text-[10px] font-mono font-bold tracking-widest uppercase border ${getStatusColor(
+                                  className={`px-3.5 py-1 text-xs font-mono font-semibold uppercase tracking-wider rounded-full border inline-flex items-center gap-1.5 ${getStatusColor(
                                     order.status
                                   )}`}
                                 >
-                                  {order.status}
+                                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                  {order.status === "delivered" ? "Delivered" : order.status === "shipped" ? "In Transit" : order.status}
                                 </span>
                               </div>
                             </div>
 
                             {/* Contextual Status Alert Banner */}
                             {isPending && (
-                              <div className="p-3.5 bg-amber-950/20 border border-amber-500/30 flex items-start justify-between gap-3 text-xs font-mono">
+                              <div className="p-3.5 bg-amber-950/20 border border-amber-500/30 rounded-lg flex items-start justify-between gap-3 text-xs font-mono">
                                 <div className="flex items-start gap-2.5 text-amber-300">
                                   <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                                   <div>
                                     <strong className="block text-amber-200 uppercase tracking-wider text-[11px]">
-                                      Awaiting Client Confirmation
+                                      Awaiting Confirmation
                                     </strong>
                                     <span className="text-amber-300/80 text-[11px]">
-                                      Please confirm this Cash on Delivery order to authorize fabric cutting and immediate atelier dispatch.
+                                      Please confirm this Cash on Delivery order to authorize immediate dispatch.
                                     </span>
                                   </div>
                                 </div>
                                 <button
                                   onClick={() => setConfirmModalOrder(order)}
-                                  className="shrink-0 px-3 py-1 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-[10px] uppercase font-mono tracking-wider shadow"
+                                  className="shrink-0 px-3.5 py-1.5 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-[10px] uppercase font-mono tracking-wider rounded shadow cursor-pointer"
                                 >
                                   Confirm Now
                                 </button>
@@ -1021,11 +1354,11 @@ export default function UserDashboard() {
                             )}
 
                             {isConfirmed && (
-                              <div className="p-3 bg-emerald-950/20 border border-emerald-500/30 flex items-center gap-2.5 text-xs font-mono text-emerald-300">
+                              <div className="p-3.5 bg-emerald-950/20 border border-emerald-500/30 rounded-lg flex items-center gap-2.5 text-xs font-mono text-emerald-300">
                                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                                 <div>
                                   <span className="font-bold uppercase tracking-wider text-[11px] text-emerald-200">
-                                    Order Confirmed by Patron
+                                    Order Confirmed
                                   </span>
                                   {order.customer_confirmed_at && (
                                     <span className="text-emerald-400/80 text-[10px] ml-1">
@@ -1034,14 +1367,14 @@ export default function UserDashboard() {
                                     </span>
                                   )}
                                   <span className="text-neutral-400 text-[10px] block mt-0.5">
-                                    Queued in atelier production queue for quality inspection and courier packing.
+                                    Your order is confirmed and queued for quality check and packing.
                                   </span>
                                 </div>
                               </div>
                             )}
 
                             {isCancelled && (
-                              <div className="p-3.5 bg-red-950/30 border border-red-500/40 text-xs font-mono text-red-300 space-y-1">
+                              <div className="p-3.5 bg-red-950/30 border border-red-500/40 rounded-lg text-xs font-mono text-red-300 space-y-1">
                                 <div className="flex items-center gap-2">
                                   <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
                                   <span className="font-bold uppercase tracking-wider text-[11px] text-red-200">
@@ -1059,31 +1392,31 @@ export default function UserDashboard() {
                                   </p>
                                 )}
                                 <p className="text-[10px] text-neutral-400 pl-6">
-                                  The Cash on Delivery invoice has been voided and inventory released.
+                                  This order has been cancelled and inventory released.
                                 </p>
                               </div>
                             )}
 
                             {isProcessing && (
-                              <div className="p-3 bg-purple-950/20 border border-purple-500/30 flex items-center gap-2.5 text-xs font-mono text-purple-300">
+                              <div className="p-3.5 bg-purple-950/20 border border-purple-500/30 rounded-lg flex items-center gap-2.5 text-xs font-mono text-purple-300">
                                 <Package className="w-4 h-4 text-purple-400 shrink-0" />
                                 <div>
                                   <span className="font-bold uppercase tracking-wider text-[11px] text-purple-200">
-                                    Atelier Fabrication in Progress
+                                    Packing in Progress
                                   </span>
                                   <span className="text-neutral-400 text-[10px] block mt-0.5">
-                                    product are being handcrafted and prepared for express courier handover.
+                                    Items are being inspected and prepared for courier dispatch.
                                   </span>
                                 </div>
                               </div>
                             )}
 
                             {isShipped && (
-                              <div className="p-3 bg-cyan-950/20 border border-cyan-500/30 flex items-center gap-2.5 text-xs font-mono text-cyan-300">
-                                <Package className="w-4 h-4 text-cyan-400 shrink-0" />
+                              <div className="p-3.5 bg-cyan-950/20 border border-cyan-500/30 rounded-lg flex items-center gap-2.5 text-xs font-mono text-cyan-300">
+                                <Truck className="w-4 h-4 text-cyan-400 shrink-0" />
                                 <div>
                                   <span className="font-bold uppercase tracking-wider text-[11px] text-cyan-200">
-                                    Dispatched via Express Courier
+                                    Dispatched via Courier
                                   </span>
                                   <span className="text-neutral-400 text-[10px] block mt-0.5">
                                     Package is in transit with {order.courier_name || "Blue Dart Express"}.
@@ -1093,143 +1426,177 @@ export default function UserDashboard() {
                             )}
 
                             {isDelivered && (
-                              <div className="p-3 bg-emerald-950/20 border border-emerald-500/30 flex items-center gap-2.5 text-xs font-mono text-emerald-300">
+                              <div className="p-3.5 bg-emerald-950/20 border border-emerald-500/30 rounded-lg flex items-center gap-2.5 text-xs font-mono text-emerald-300">
                                 <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                                 <div>
                                   <span className="font-bold uppercase tracking-wider text-[11px] text-emerald-200">
-                                    Delivered to Patron Residence
+                                    Delivered Successfully
                                   </span>
                                   <span className="text-neutral-400 text-[10px] block mt-0.5">
-                                    Acquisition finalized. Thank you for choosing NOIR Atelier.
+                                    Package delivered to your address. Thank you for shopping with NOIR.
                                   </span>
                                 </div>
                               </div>
                             )}
 
-                            {/* Delivery Address Details */}
-                            {order.shipping_address && (
-                              <div className="p-3.5 bg-black/50 border border-white/5 flex items-start gap-3 text-xs font-mono">
-                                <MapPin className="w-4 h-4 text-[#c5a46d] shrink-0 mt-0.5" />
-                                <div className="space-y-0.5 flex-1">
-                                  <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 block">
-                                    Delivery Destination
-                                  </span>
-                                  <p className="text-neutral-200 text-xs">
-                                    {order.shipping_address.address && `${order.shipping_address.address}, `}
-                                    {order.shipping_address.city && `${order.shipping_address.city}, `}
-                                    {order.shipping_address.state && `${order.shipping_address.state} `}
-                                    {order.shipping_address.postalCode && `- ${order.shipping_address.postalCode}`}
-                                    {order.shipping_address.country && ` (${order.shipping_address.country})`}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Tracking Pipeline Visualizer */}
-                            <div className="py-2">
-                              <span className="text-[10px] font-mono tracking-widest uppercase text-neutral-400 block mb-3">
-                                Fulfillment Journey
-                              </span>
-                              {isCancelled ? (
-                                <div className="p-3 bg-black/60 border border-red-500/20 text-center text-xs font-mono text-red-400">
-                                  Journey Cancelled · No Dispatch Scheduled
-                                </div>
-                              ) : (
-                                <div className="grid grid-cols-4 gap-2 text-center text-[10px] font-mono">
-                                  {[
-                                    { label: "Received", done: true },
-                                    {
-                                      label: "Confirmed / Prep",
-                                      done: ["confirmed", "processing", "shipped", "delivered"].includes(order.status),
-                                    },
-                                    { label: "In Transit", done: ["shipped", "delivered"].includes(order.status) },
-                                    { label: "Delivered", done: order.status === "delivered" },
-                                  ].map((step, idx) => (
-                                    <div key={idx} className="flex flex-col items-center">
-                                      <div
-                                        className={`w-6 h-6 rounded-full border flex items-center justify-center mb-1.5 ${step.done
-                                            ? "bg-[#c5a46d] text-black border-[#c5a46d]"
-                                            : "bg-black text-neutral-600 border-white/15"
-                                          }`}
-                                      >
-                                        {step.done ? "✓" : idx + 1}
-                                      </div>
-                                      <span className={step.done ? "text-white font-bold" : "text-neutral-500"}>
-                                        {step.label}
-                                      </span>
-                                    </div>
-                                  ))}
+                            {/* Delivery Address & Courier Partner Details */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                              {order.shipping_address && (
+                                <div className="p-4 bg-[#181818] border border-white/5 rounded-lg flex items-start gap-3.5 text-xs font-body">
+                                  <MapPin className="w-4 h-4 text-[#c5a46d] shrink-0 mt-0.5" />
+                                  <div className="space-y-1 min-w-0">
+                                    <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-neutral-400 block">
+                                      Delivery Address
+                                    </span>
+                                    <p className="text-neutral-200 text-xs sm:text-[13px] leading-relaxed">
+                                      {formatCleanAddress(order.shipping_address)}
+                                    </p>
+                                  </div>
                                 </div>
                               )}
 
                               {order.tracking_number && !isCancelled && (
-                                <div className="mt-4 p-3 bg-black/60 border border-white/10 flex items-center justify-between text-xs font-mono">
-                                  <span className="text-neutral-400">
-                                    Courier: <span className="text-white">{order.courier_name || "Blue Dart Express"}</span>
-                                  </span>
-                                  <span className="text-[#c5a46d] font-bold">
-                                    Waybill: {order.tracking_number}
-                                  </span>
+                                <div className="p-4 bg-[#181818] border border-white/5 rounded-lg flex items-start gap-3.5 text-xs font-body">
+                                  <Truck className="w-4 h-4 text-[#c5a46d] shrink-0 mt-0.5" />
+                                  <div className="space-y-1 min-w-0 flex-1">
+                                    <span className="text-[10px] uppercase font-mono font-bold tracking-wider text-neutral-400 block">
+                                      Courier Partner
+                                    </span>
+                                    <p className="text-neutral-200 text-xs sm:text-[13px] font-medium">
+                                      {order.courier_name || "Blue Dart Express"}
+                                    </p>
+                                    <div className="flex items-center gap-2 pt-0.5 text-xs font-mono">
+                                      <span className="text-neutral-400">Waybill:</span>
+                                      <span className="text-[#c5a46d] font-bold">{order.tracking_number}</span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                             </div>
 
-                            {/* Order Items */}
-                            <div className="border-t border-white/10 pt-4 space-y-3">
-                              <span className="text-[10px] font-mono tracking-widest uppercase text-neutral-400 block mb-1">
-                                Acquired product ({order.items?.length || 1})
-                              </span>
-                              {order.items?.map((item, idx) => (
-                                <div key={idx} className="flex items-center gap-4">
-                                  <img
-                                    src={item.product_image || "/images/placeholders/hoodie.jpg"}
-                                    alt={item.product_name}
-                                    loading="lazy"
-                                    decoding="async"
-                                    className="w-12 h-14 object-cover bg-neutral-900 border border-white/10"
-                                  />
-                                  <div className="flex-1">
-                                    <h4 className="text-xs font-bold text-white uppercase">
-                                      {item.product_name}
-                                    </h4>
-                                    <span className="text-[10px] text-neutral-400 font-mono">
-                                      {item.color_name} · Size {item.size} · Qty {item.quantity}
-                                    </span>
-                                  </div>
-                                  <span className="text-xs font-mono text-[#c5a46d] font-bold">
-                                    {formatPrice(item.unit_price * item.quantity)}
-                                  </span>
+                            {/* Fulfillment Journey Progress Tracker */}
+                            {!isCancelled && (
+                              <div className="p-4 sm:p-5 bg-[#181818] border border-white/5 rounded-lg space-y-3">
+                                <span className="text-[10px] font-mono tracking-widest uppercase text-neutral-400 block font-semibold">
+                                  Fulfillment Progress
+                                </span>
+                                <div className="grid grid-cols-4 gap-2 text-center text-xs font-mono">
+                                  {[
+                                    { label: "Received", done: true, icon: Check },
+                                    {
+                                      label: "Confirmed",
+                                      done: ["confirmed", "processing", "shipped", "delivered"].includes(order.status),
+                                      icon: CheckCircle2,
+                                    },
+                                    { label: "In Transit", done: ["shipped", "delivered"].includes(order.status), icon: Truck },
+                                    { label: "Delivered", done: order.status === "delivered", icon: ShieldCheck },
+                                  ].map((step, idx) => {
+                                    const Icon = step.icon;
+                                    return (
+                                      <div key={idx} className="flex flex-col items-center">
+                                        <div
+                                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 flex items-center justify-center mb-1.5 transition-all shadow-xs ${
+                                            step.done
+                                              ? "bg-emerald-500 border-emerald-400 text-black shadow-emerald-500/20"
+                                              : "bg-neutral-900 border-white/10 text-neutral-600"
+                                          }`}
+                                        >
+                                          <Icon className="w-3.5 h-3.5 stroke-[2.5]" />
+                                        </div>
+                                        <span
+                                          className={`text-[10px] sm:text-xs font-mono ${
+                                            step.done ? "text-white font-bold" : "text-neutral-500"
+                                          }`}
+                                        >
+                                          {step.label}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
-                              ))}
+                              </div>
+                            )}
+
+                            {/* Order Items */}
+                            <div className="space-y-3 pt-1">
+                              <span className="text-[10px] font-mono tracking-widest uppercase text-neutral-400 block font-semibold">
+                                Order Items ({order.items?.length || 1})
+                              </span>
+                              <div className="divide-y divide-white/5 border border-white/5 rounded-lg bg-[#181818] overflow-hidden">
+                                {order.items?.map((item, idx) => (
+                                  <div key={idx} className="flex items-center gap-4 p-3.5 sm:p-4 hover:bg-white/[0.02] transition-colors">
+                                    <img
+                                      src={item.product_image || "/images/placeholder-product.png"}
+                                      alt={item.product_name}
+                                      loading="lazy"
+                                      decoding="async"
+                                      className="w-14 h-18 sm:w-16 sm:h-20 object-cover object-top rounded bg-neutral-900 border border-white/10 shrink-0"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <h4 className="text-xs sm:text-sm font-bold text-white uppercase truncate">
+                                        {item.product_name?.replace(/silhouette/gi, "Fit").replace(/atelier/gi, "Studio")}
+                                      </h4>
+                                      <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-neutral-400 font-mono">
+                                        <span className="px-2 py-0.5 bg-white/5 rounded border border-white/10">
+                                          Size: {item.size}
+                                        </span>
+                                        <span className="px-2 py-0.5 bg-white/5 rounded border border-white/10">
+                                          {item.color_name}
+                                        </span>
+                                        <span>Qty: {item.quantity}</span>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 shrink-0">
+                                      <span className="text-xs sm:text-sm font-mono text-[#c5a46d] font-bold">
+                                        {formatPrice(item.unit_price * item.quantity)}
+                                      </span>
+                                      {isCancelled && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleBuyAgainItem(item)}
+                                          className="px-2.5 py-1 bg-white/10 hover:bg-[#1A3B8B] text-neutral-200 hover:text-white text-[10px] font-mono uppercase tracking-wider rounded transition-all flex items-center gap-1.5 cursor-pointer border border-white/10 hover:border-[#1A3B8B]"
+                                          title="Buy this cancelled item again"
+                                        >
+                                          <RotateCcw className="w-3 h-3" />
+                                          <span className="hidden sm:inline">Buy Again</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
 
-                            {/* Action Buttons Bar */}
-                            <div className="border-t border-white/10 pt-4 flex flex-wrap items-center justify-between gap-4">
+                            {/* Action Buttons & Summary Bar */}
+                            <div className="border-t border-white/10 pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                               <div>
-                                <span className="text-[10px] font-mono text-neutral-500 uppercase block">
-                                  Payment: Cash on Delivery (COD)
+                                <span className="text-[11px] font-mono text-neutral-400 uppercase block">
+                                  Payment: {order.payment_method || "Cash on Delivery (COD)"}
                                 </span>
-                                <span className="text-xs font-mono text-white font-bold">
-                                  Total: {formatPrice(order.total_amount)}
-                                </span>
+                                <div className="flex items-baseline gap-2 mt-0.5">
+                                  <span className="text-xs text-neutral-400 font-mono">Total Paid / Due:</span>
+                                  <span className="text-base sm:text-lg font-mono text-white font-bold">
+                                    {formatPrice(order.total_amount)}
+                                  </span>
+                                  <span className="text-[10px] text-emerald-400 font-mono">(Free Express Delivery)</span>
+                                </div>
                               </div>
 
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2.5">
                                 {/* 1. Pending: Show Confirm and Cancel buttons */}
                                 {isPending && (
                                   <>
                                     <button
                                       onClick={() => setCancelModalOrder(order)}
-                                      className="px-4 py-2 border border-red-500/40 hover:border-red-400 text-red-400 hover:text-white hover:bg-red-950/30 text-xs font-mono uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer"
+                                      className="px-4 py-2 border border-red-500/40 hover:border-red-400 text-red-400 hover:text-white hover:bg-red-950/30 text-xs font-mono uppercase tracking-wider transition-colors rounded cursor-pointer"
                                     >
-                                      <X className="w-3.5 h-3.5" />
-                                      <span>Cancel Order</span>
+                                      Cancel Order
                                     </button>
                                     <button
                                       onClick={() => setConfirmModalOrder(order)}
-                                      className="px-5 py-2 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-xs font-mono uppercase tracking-wider transition-all shadow-lg flex items-center gap-2 cursor-pointer"
+                                      className="px-5 py-2 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-xs font-mono uppercase tracking-wider transition-all shadow-md rounded flex items-center gap-1.5 cursor-pointer"
                                     >
-                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <CheckCircle2 className="w-4 h-4" />
                                       <span>Confirm Order</span>
                                     </button>
                                   </>
@@ -1239,26 +1606,47 @@ export default function UserDashboard() {
                                 {(isConfirmed || isProcessing) && canCancel && (
                                   <button
                                     onClick={() => setCancelModalOrder(order)}
-                                    className="px-4 py-2 border border-white/20 hover:border-red-400 text-neutral-400 hover:text-red-400 hover:bg-red-950/20 text-xs font-mono uppercase tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer"
+                                    className="px-4 py-2 border border-white/20 hover:border-red-400 text-neutral-400 hover:text-red-400 hover:bg-red-950/20 text-xs font-mono uppercase tracking-wider transition-colors rounded cursor-pointer"
                                   >
-                                    <X className="w-3.5 h-3.5" />
-                                    <span>Cancel Order</span>
+                                    Cancel Order
                                   </button>
                                 )}
 
                                 {/* 3. In-transit / Delivered */}
                                 {(isShipped || isDelivered) && (
-                                  <span className="text-[11px] font-mono text-neutral-500">
-                                    {isDelivered ? "Delivered to patron" : "In transit with Blue Dart Express"}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <Link
+                                      href="/contact"
+                                      className="px-3.5 py-2 border border-white/15 hover:border-white/30 text-neutral-300 hover:text-white text-xs font-mono uppercase tracking-wider transition-colors rounded"
+                                    >
+                                      Support
+                                    </Link>
+                                    <Link
+                                      href="/men"
+                                      className="px-4 py-2 bg-[#1A3B8B] hover:bg-[#142e6d] text-white text-xs font-mono uppercase tracking-wider transition-colors rounded font-bold shadow-xs"
+                                    >
+                                      Shop More
+                                    </Link>
+                                  </div>
                                 )}
 
-                                {/* 4. Cancelled */}
+                                {/* 4. Cancelled with prominent Buy Again button */}
                                 {isCancelled && (
-                                  <span className="text-[11px] font-mono text-red-400 flex items-center gap-1.5">
-                                    <X className="w-3.5 h-3.5" />
-                                    <span>Order Cancelled</span>
-                                  </span>
+                                  <div className="flex flex-wrap items-center gap-2.5">
+                                    <span className="px-3 py-1.5 bg-red-950/40 border border-red-500/30 text-xs font-mono text-red-300 rounded-lg flex items-center gap-1.5">
+                                      <X className="w-3.5 h-3.5 text-red-400" />
+                                      <span>Cancelled</span>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleBuyAgainOrder(order)}
+                                      className="px-4 py-2 bg-[#1A3B8B] hover:bg-[#142e6d] text-white text-xs font-mono uppercase tracking-wider font-bold rounded-lg transition-all shadow-md hover:shadow-lg flex items-center gap-2 cursor-pointer active:scale-95"
+                                      title="Add all items from this cancelled order back to your bag"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                      <span>Buy Again</span>
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -1621,7 +2009,7 @@ export default function UserDashboard() {
 
                           <div>
                             <span className="text-[10px] font-mono tracking-widest uppercase text-[#c5a46d] block mb-1">
-                              ATELIER RESIDENCE VAULT
+                              SAVED ADDRESSES
                             </span>
                             <h3 className="text-xl font-bold uppercase font-display text-white">
                               {editingAddress ? "Edit Saved Address" : "Add New Saved Address"}
@@ -1847,7 +2235,7 @@ export default function UserDashboard() {
                           Your wishlist is empty.
                         </p>
                         <p className="text-xs text-neutral-500 font-mono max-w-sm mx-auto">
-                          Explore our runway collection and tap the heart icon on any silhouette to archive it here.
+                          Explore our runway collection and tap the heart icon on any product to save it here.
                         </p>
                         <Link
                           href="/new-arrivals"
@@ -2011,7 +2399,7 @@ export default function UserDashboard() {
                 </div>
 
                 <div className="p-3 bg-[#c5a46d]/10 border border-[#c5a46d]/30 text-[11px] font-mono text-[#c5a46d] leading-relaxed">
-                  By confirming, you authorize our atelier team to cut fabric, pack your custom box, and dispatch via Blue Dart Express with Cash on Delivery.
+                  By confirming, you authorize our team to pack your order and dispatch via Blue Dart Express with Cash on Delivery.
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-2">
@@ -2103,13 +2491,13 @@ export default function UserDashboard() {
                       rows={3}
                       value={cancelCustomNotes}
                       onChange={(e) => setCancelCustomNotes(e.target.value)}
-                      placeholder="Provide additional details for the atelier team..."
+                      placeholder="Provide additional details for our team..."
                       className="w-full bg-black border border-white/15 p-3 text-xs text-white focus:outline-none focus:border-[#c5a46d] font-mono"
                     />
                   </div>
 
                   <div className="p-3 bg-red-950/20 border border-red-500/30 text-[11px] font-mono text-red-300 leading-relaxed">
-                    Warning: Cancelling will immediately release reserved inventory back into our atelier stock and void the Cash on Delivery request. This action cannot be reversed.
+                    Warning: Cancelling will immediately release reserved inventory back into our store stock and void the Cash on Delivery request. This action cannot be reversed.
                   </div>
                 </div>
 

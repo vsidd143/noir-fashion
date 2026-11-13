@@ -15,7 +15,7 @@ const DynamicOrbitalWheel = dynamic(() => import("./OrbitalImageWheel"), {
       style={{ height: "100dvh" }}
       className="w-full bg-[#F4F0E8] border-t border-[#E5E0D8] flex items-center justify-center font-mono text-xs uppercase tracking-widest text-[#6E6D68]"
     >
-      Loading Atelier Orbit...
+      Loading Product Showcase...
     </div>
   ),
 });
@@ -55,7 +55,9 @@ export default function ProductWheelSection() {
     if (typeof window === "undefined") return;
 
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setPrefersReducedMotion(motionQuery.matches);
+    if (motionQuery.matches) {
+      queueMicrotask(() => setPrefersReducedMotion(true));
+    }
 
     const handleMotionChange = (e: MediaQueryListEvent) => {
       setPrefersReducedMotion(e.matches);
@@ -70,8 +72,9 @@ export default function ProductWheelSection() {
 
   // IntersectionObserver to lazy-load GSAP code near viewport
   useEffect(() => {
-    if (typeof window === "undefined" || !("IntersectionObserver" in window)) {
-      setIsInViewportOrNear(true);
+    if (typeof window === "undefined") return;
+    if (!("IntersectionObserver" in window)) {
+      queueMicrotask(() => setIsInViewportOrNear(true));
       return;
     }
 

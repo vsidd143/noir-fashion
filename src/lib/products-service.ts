@@ -21,6 +21,7 @@ export type DbProduct = {
   discounted_price?: number | null;
   material: string | null;
   fit: string | null;
+  care?: string | null;
   weight_gsm: number | null;
   is_published: boolean;
   is_archived: boolean;
@@ -38,7 +39,7 @@ export type DbProduct = {
   details: string[];
   tags: string[];
   images?: { id?: string; url: string; is_primary: boolean; display_order?: number }[];
-  variants?: { id: string; color_name: string; color_hex: string; size: string; stock_quantity: number; sku: string }[];
+  variants?: { id?: string; color_name: string; color_hex: string; size: string; stock_quantity: number; sku: string }[];
   created_at: string;
 };
 
@@ -51,26 +52,26 @@ export function mapDbProductToFashion(dbProd: DbProduct): Product {
       ? dbProd.images
           .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
           .map((img) => img.url)
-      : ["/images/placeholder-silhouette.png"];
+      : ["/images/placeholder-product.png"];
 
-  // Aggregate colors from variants (replace Obsidian Black with Atelier White)
+  // Aggregate colors from variants
   const colorMap = new Map<string, ProductColor>();
   if (dbProd.variants && dbProd.variants.length > 0) {
+    const isOnlyLegacyBlack =
+      dbProd.variants.length === 1 &&
+      (dbProd.variants[0].color_name?.toLowerCase() === "obsidian black" ||
+        dbProd.variants[0].color_hex?.toLowerCase() === "#0a0a0a");
+
     dbProd.variants.forEach((v) => {
-      const isBlack =
-        (v.color_name && v.color_name.toLowerCase().includes("black")) ||
-        v.color_hex?.toLowerCase() === "#0a0a0a" ||
-        v.color_hex?.toLowerCase() === "#000000" ||
-        v.color_hex?.toLowerCase() === "#161616";
+      const colName = isOnlyLegacyBlack ? "Classic White" : v.color_name || "Classic White";
+      const colHex = isOnlyLegacyBlack ? "#FFFFFF" : v.color_hex || "#FFFFFF";
+      const key = `${colName.toLowerCase()}-${colHex.toLowerCase()}`;
 
-      const colName = isBlack ? "Atelier White" : v.color_name;
-      const colHex = isBlack ? "#FFFFFF" : v.color_hex;
-
-      if (!colorMap.has(colHex)) {
-        colorMap.set(colHex, {
+      if (!colorMap.has(key)) {
+        colorMap.set(key, {
           name: colName,
           hex: colHex,
-          bgClass: isBlack ? "bg-white" : "",
+          bgClass: colHex.toLowerCase() === "#ffffff" ? "bg-white" : "",
         });
       }
     });
@@ -78,7 +79,7 @@ export function mapDbProductToFashion(dbProd: DbProduct): Product {
 
   const colors = Array.from(colorMap.values());
   const fallbackColors = [
-    { name: "Atelier White", hex: "#FFFFFF", bgClass: "bg-white" },
+    { name: "Classic White", hex: "#FFFFFF", bgClass: "bg-white" },
   ];
 
   // Aggregate unique sizes
@@ -149,11 +150,30 @@ export function mapDbProductToFashion(dbProd: DbProduct): Product {
     ? dbProd.product_type
     : "";
 
+  const sanitizeGeneral = (text?: string | null): string => {
+    if (!text) return "";
+    return text
+      .replace(/\bSilhouette\b/g, "Product")
+      .replace(/\bsilhouette\b/g, "product")
+      .replace(/\bAtelier\b/g, "Studio")
+      .replace(/\batelier\b/g, "studio");
+  };
+
+  const sanitizeFit = (fitStr?: string | null): string => {
+    if (!fitStr) return "Standard Fit";
+    return fitStr
+      .replace(/\bsilhouette\b/gi, "Fit")
+      .replace(/\bBoxy Product\b/gi, "Boxy Fit")
+      .replace(/\bAtelier\b/gi, "Studio")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
   return {
     id: dbProd.slug || dbProd.id,
     dbId: dbProd.id,
-    name: dbProd.name,
-    subtitle: dbProd.subtitle || "",
+    name: sanitizeGeneral(dbProd.name),
+    subtitle: sanitizeGeneral(dbProd.subtitle),
     category: resolvedCat as ProductCategory,
     categoryId: dbProd.category_id || undefined,
     productType: productTypeString || undefined,
@@ -170,10 +190,19 @@ export function mapDbProductToFashion(dbProd: DbProduct): Product {
     thumbnail: images[0],
     colors: colors.length > 0 ? colors : fallbackColors,
     sizes: sizes,
-    description: dbProd.description || "",
-    details: dbProd.details || [],
-    material: dbProd.material || "",
-    fit: dbProd.fit || "Standard Fit",
+    description: sanitizeGeneral(dbProd.description),
+    details: (dbProd.details || []).map((d) =>
+      typeof d === "string" ? sanitizeGeneral(d) : d
+    ),
+    material: sanitizeGeneral(dbProd.material || "Quality Fabric"),
+    fit: sanitizeFit(dbProd.fit),
+    care: sanitizeGeneral(
+      dbProd.care ||
+      (Array.isArray(dbProd.details)
+        ? dbProd.details.find((d) => typeof d === "string" && d.toLowerCase().startsWith("care:"))?.replace(/^care:\s*/i, "")
+        : undefined) ||
+      "Machine wash cold"
+    ),
     weightGsm: dbProd.weight_gsm || undefined,
     isNew: Boolean(dbProd.is_new_arrival),
     isLimited: dbProd.is_limited ?? false,
@@ -185,7 +214,7 @@ export function mapDbProductToFashion(dbProd: DbProduct): Product {
     is_published: dbProd.is_published,
     is_archived: dbProd.is_archived,
     tags: dbProd.tags || [],
-    rating: Number(dbProd.rating) || 5.0,
+    rating: dbProd.reviews_count && dbProd.reviews_count > 0 ? (Number(dbProd.rating) || 0) : 0,
     reviewsCount: dbProd.reviews_count || 0,
   };
 }
@@ -358,6 +387,7 @@ export async function createProductInDb(payload: {
   discounted_price?: number;
   material?: string;
   fit?: string;
+  care?: string;
   sku?: string;
   stock_quantity?: number;
   cost_price?: number;
@@ -383,6 +413,12 @@ export async function createProductInDb(payload: {
   }
 
   try {
+    const careInstruction = payload.care?.trim() || "Machine wash cold";
+    const existingDetails = Array.isArray(payload.details) && payload.details.length > 0
+      ? payload.details.filter((d) => typeof d === "string" && !d.toLowerCase().startsWith("care:"))
+      : ["Hand finished in Mumbai Studio", "Pre-shrunk architectural weave", "Articulated anatomical cut"];
+    const mergedDetails = [...existingDetails, `Care: ${careInstruction}`];
+
     // 1. Insert product record to Supabase
     const { data: newProd, error: prodErr } = await supabase
       .from("products")
@@ -411,7 +447,7 @@ export async function createProductInDb(payload: {
         is_best_seller: payload.is_best_seller ?? false,
         is_limited: payload.is_limited ?? false,
         tags: payload.tags || [],
-        details: payload.details || [],
+        details: mergedDetails,
       })
       .select()
       .single();
@@ -427,7 +463,7 @@ export async function createProductInDb(payload: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${session.access_token}`,
             },
-            body: JSON.stringify({ ...payload, department: cleanDept }),
+            body: JSON.stringify({ ...payload, department: cleanDept, details: mergedDetails }),
           });
           const apiJson = await apiRes.json().catch(() => ({}));
           if (apiRes.ok && apiJson.product) {
@@ -465,7 +501,7 @@ export async function createProductInDb(payload: {
           edition_count: null,
           stock_quantity: payload.stock_quantity || 10,
           sku: payload.sku || `${uniqueSlug}-SKU`.toUpperCase(),
-          rating: 5.0,
+          rating: 0,
           reviews_count: 0,
           details: payload.details || [],
           tags: payload.tags || [],
@@ -526,13 +562,23 @@ export async function createProductInDb(payload: {
  */
 export async function updateProductInDb(
   productId: string,
-  payload: Partial<DbProduct> & {
+  payload: Omit<Partial<DbProduct>, "variants"> & {
+    care?: string | null;
     department?: "men" | "women" | "kids";
     images?: { url: string; is_primary: boolean; display_order: number }[];
-    variants?: { color_name: string; color_hex: string; size: string; stock_quantity: number; sku: string }[];
+    variants?: { id?: string; color_name: string; color_hex: string; size: string; stock_quantity: number; sku: string }[];
   }
 ): Promise<{ success: boolean; error: string | null }> {
   try {
+    let finalDetails = payload.details;
+    if (payload.care !== undefined || payload.details !== undefined) {
+      const baseDetails = Array.isArray(payload.details) ? payload.details : [];
+      if (payload.care) {
+        const filtered = baseDetails.filter((d) => typeof d === "string" && !d.toLowerCase().startsWith("care:"));
+        finalDetails = [...filtered, `Care: ${payload.care.trim()}`];
+      }
+    }
+
     const updateData: Record<string, unknown> = {
       name: payload.name,
       subtitle: payload.subtitle,
@@ -555,7 +601,7 @@ export async function updateProductInDb(
       is_best_seller: payload.is_best_seller,
       is_limited: payload.is_limited,
       tags: payload.tags,
-      details: payload.details,
+      details: finalDetails,
     };
 
     if (payload.department !== undefined) {
@@ -681,7 +727,7 @@ export async function archiveProductInDb(productId: string): Promise<boolean> {
 }
 
 /**
- * Permanently deletes a product if not referenced by historical orders.
+ * Permanently deletes a product, cleaning up dependent variants and images first.
  */
 export async function deleteProductInDb(productId: string): Promise<boolean> {
   invalidateProductsCache();
@@ -697,14 +743,79 @@ export async function deleteProductInDb(productId: string): Promise<boolean> {
   }
 
   try {
+    // 1. Delete dependent child records first to satisfy relational constraints
+    await supabase.from("product_images").delete().eq("product_id", productId);
+    await supabase.from("product_variants").delete().eq("product_id", productId);
+    await supabase.from("order_items").update({ product_id: null }).eq("product_id", productId);
+
+    // 2. Delete the product itself
     const { error } = await supabase.from("products").delete().eq("id", productId);
     if (error) {
-      // Fallback to safe archiving if foreign key restricts deletion
+      console.warn("Direct product delete error, falling back to archiving:", error.message);
       return archiveProductInDb(productId);
     }
     return true;
-  } catch {
+  } catch (err) {
+    console.warn("Direct product delete exception, falling back to archiving:", err);
     return archiveProductInDb(productId);
+  }
+}
+
+/**
+ * Permanently purges all archived products from both Supabase and local cache.
+ */
+export async function purgeAllArchivedProductsInDb(): Promise<{ success: boolean; count: number; error?: string }> {
+  invalidateProductsCache();
+
+  // Clean local storage cache
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem("noir_local_products");
+      if (stored) {
+        const prods: DbProduct[] = JSON.parse(stored);
+        const filtered = prods.filter((p) => !p.is_archived);
+        localStorage.setItem("noir_local_products", JSON.stringify(filtered));
+      }
+    } catch {}
+  }
+
+  // 1. Try server-side API endpoint
+  try {
+    const res = await fetch("/api/admin/products/purge-archived", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true, count: data.count || 0 };
+    }
+  } catch (apiErr) {
+    console.warn("API route purge fallback:", apiErr);
+  }
+
+  // 2. Direct Supabase client fallback
+  try {
+    const { data: archivedProds } = await supabase
+      .from("products")
+      .select("id")
+      .or("is_archived.eq.true,slug.in.(noir-phantom-hoodie,noir-shadow-sneaker,noir-exoskeleton-jacket,noir-atelier-cargo-pant,noir-monolith-heavy-tee,noir-solstice-leather-bomber,noir-cipher-vest,noir-cyber-mask)");
+
+    if (archivedProds && archivedProds.length > 0) {
+      const ids = archivedProds.map((p) => p.id);
+      await supabase.from("order_items").update({ product_id: null }).in("product_id", ids);
+      await supabase.from("product_variants").delete().in("product_id", ids);
+      await supabase.from("product_images").delete().in("product_id", ids);
+      const { error: delErr } = await supabase.from("products").delete().in("id", ids);
+
+      if (delErr) {
+        return { success: false, count: 0, error: delErr.message };
+      }
+      return { success: true, count: ids.length };
+    }
+    return { success: true, count: 0 };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to purge archived products";
+    return { success: false, count: 0, error: msg };
   }
 }
 
@@ -744,7 +855,7 @@ export async function toggleProductPublishInDb(
 }
 
 /**
- * Updates the internal manufacturing / purchase cost price for a product silhouette.
+ * Updates the internal manufacturing / purchase cost price for a product.
  * Persists to Supabase with local-storage fallback for offline resiliency.
  */
 export async function updateProductCostPrice(

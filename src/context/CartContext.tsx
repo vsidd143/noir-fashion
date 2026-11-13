@@ -21,6 +21,7 @@ type CartContextType = {
   couponCode: string;
   applyCoupon: (code: string) => Promise<boolean> | boolean;
   addToCart: (product: Product, color?: ProductColor, size?: string, quantity?: number) => void;
+  buyNow: (product: Product, color?: ProductColor, size?: string, quantity?: number) => void;
   removeFromCart: (productId: string, colorHex: string, size: string) => void;
   updateQuantity: (productId: string, colorHex: string, size: string, delta: number) => void;
   clearCart: () => void;
@@ -316,6 +317,67 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setIsCartOpen(true);
   };
 
+  const buyNow = (
+    product: Product,
+    color?: ProductColor,
+    size?: string,
+    quantity: number = 1
+  ) => {
+    if (product?.id) {
+      knownProductsRef.current.set(product.id, product);
+    }
+    const chosenColor = color || product.colors[0] || { name: "Classic White", hex: "#FFFFFF", bgClass: "bg-white" };
+    const chosenSize = size || product.sizes[0] || "M";
+
+    setCart((prevCart) => {
+      const existingIndex = prevCart.findIndex(
+        (item) =>
+          item.product.id === product.id &&
+          item.selectedColor.hex === chosenColor.hex &&
+          item.selectedSize === chosenSize
+      );
+
+      let newCart: CartItem[];
+      if (existingIndex > -1) {
+        newCart = [...prevCart];
+        newCart[existingIndex].quantity += quantity;
+      } else {
+        newCart = [
+          ...prevCart,
+          {
+            product,
+            selectedColor: chosenColor,
+            selectedSize: chosenSize,
+            quantity,
+          },
+        ];
+      }
+      return newCart;
+    });
+
+    if (user) {
+      resolveProductUuid(product).then((prodUuid) => {
+        if (!prodUuid) return;
+        supabase
+          .from("cart_items")
+          .upsert(
+            {
+              user_id: user.id,
+              product_id: prodUuid,
+              color_name: chosenColor.name,
+              size: chosenSize,
+              quantity,
+            },
+            { onConflict: "user_id,product_id,color_name,size" }
+          )
+          .then(null, () => {});
+      });
+    }
+
+    setIsCartOpen(false);
+    setIsCheckoutOpen(true);
+  };
+
   const removeFromCart = (productId: string, colorHex: string, size: string) => {
     const targetItem = cart.find(
       (item) =>
@@ -575,6 +637,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         couponCode,
         applyCoupon,
         addToCart,
+        buyNow,
         removeFromCart,
         updateQuantity,
         clearCart,

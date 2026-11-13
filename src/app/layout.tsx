@@ -4,8 +4,8 @@ import AppProviders from "@/components/providers/AppProviders";
 
 export const metadata: Metadata = {
   title: "NOIR — Beyond Fashion. Beyond Ordinary.",
-  description: "Premium Indian Streetwear & Luxury Fashion Atelier. Immersive 3D Digital Experience.",
-  keywords: ["Luxury Streetwear", "NOIR Atelier", "Indian Fashion", "3D Fashion", "Mumbai Delhi Bengaluru"],
+  description: "Premium Indian Streetwear & Luxury Fashion Studio. Immersive 3D Digital Experience.",
+  keywords: ["Luxury Streetwear", "NOIR Studio", "Indian Fashion", "3D Fashion", "Mumbai Delhi Bengaluru"],
 };
 
 export default function RootLayout({

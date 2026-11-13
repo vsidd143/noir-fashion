@@ -25,13 +25,16 @@ import {
   Star,
   Check,
   ChevronRight,
+  ChevronLeft,
   Eye,
   ArrowRight,
   AlertCircle,
+  Zap,
 } from "lucide-react";
+import ProductReviewModal from "@/components/ui/ProductReviewModal";
 
 export default function ProductDetailClient({ slug }: { slug: string }) {
-  const { addToCart, isInWishlist, toggleWishlist, setQuickViewProduct } = useCart();
+  const { addToCart, buyNow, isInWishlist, toggleWishlist } = useCart();
   const { navigateTo } = usePageTransition();
 
   const [liveProducts, setLiveProducts] = useState<Product[]>([]);
@@ -65,6 +68,49 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   const [addedLookSuccess, setAddedLookSuccess] = useState(false);
   const [recentlyViewed, setRecentlyViewed] = useState<Product[]>([]);
 
+  // Customer Reviews State (Real-time and genuine)
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewsStats, setReviewsStats] = useState<{ rating: number; count: number } | null>(null);
+
+  // Fetch verified reviews for this product
+  useEffect(() => {
+    if (!product?.id) return;
+    let isMounted = true;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/reviews?productId=${encodeURIComponent(product.id)}`);
+        const data = await res.json();
+        if (data.success && isMounted) {
+          let count = data.count || 0;
+          let avg = data.averageRating || 0;
+
+          // Merge local cache if available
+          try {
+            const localSaved = localStorage.getItem(`noir_reviews_${product.id}`);
+            if (localSaved) {
+              const localList = JSON.parse(localSaved);
+              if (Array.isArray(localList) && localList.length > count) {
+                count = localList.length;
+                avg = Number(
+                  (localList.reduce((acc: number, r: { rating?: number }) => acc + (r.rating || 5), 0) / count).toFixed(1)
+                );
+              }
+            }
+          } catch {}
+
+          setReviewsStats({ rating: avg, count });
+        }
+      } catch (err) {
+        console.warn("Could not query product reviews:", err);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [product?.id]);
+
   // Update selected color/size when product changes
   useEffect(() => {
     if (product) {
@@ -83,16 +129,8 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
       queueMicrotask(() => {
         const rawFirstColor = product.colors[0];
-        const isBlack =
-          rawFirstColor?.name?.toLowerCase().includes("black") ||
-          rawFirstColor?.hex?.toLowerCase() === "#0a0a0a" ||
-          rawFirstColor?.hex?.toLowerCase() === "#000000" ||
-          rawFirstColor?.hex?.toLowerCase() === "#161616";
-
         setSelectedColor(
-          isBlack
-            ? { name: "Atelier White", hex: "#FFFFFF", bgClass: "bg-white" }
-            : rawFirstColor || { name: "Atelier White", hex: "#FFFFFF", bgClass: "bg-white" }
+          rawFirstColor || { name: "Classic White", hex: "#FFFFFF", bgClass: "bg-white" }
         );
         setSelectedSize("");
         setSizeError(false);
@@ -146,6 +184,15 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
   const isOutOfStock = stockQuantity <= 0;
   const maxAllowedQty = Math.max(1, Math.min(10, stockQuantity));
 
+  const activeReviewsCount =
+    reviewsStats !== null ? reviewsStats.count : (product.reviewsCount || 0);
+  const activeRating =
+    reviewsStats !== null
+      ? reviewsStats.rating
+      : activeReviewsCount > 0
+      ? Number(product.rating) || 0
+      : 0;
+
   const activeColor = selectedColor || product.colors[0] || { name: "Standard", hex: "#161616", bgClass: "" };
 
   const outfit = getCompleteTheLook(product, liveProducts);
@@ -171,6 +218,16 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
     setAddedToCartSuccess(true);
     setSizeError(false);
     setTimeout(() => setAddedToCartSuccess(false), 2500);
+  };
+
+  const handleBuyNow = () => {
+    if (isOutOfStock) return;
+    if (!selectedSize && product.sizes.length > 0) {
+      setSizeError(true);
+      return;
+    }
+    const chosenSize = selectedSize || product.sizes[0] || "M";
+    buyNow(product, activeColor, chosenSize, quantity);
   };
 
   const handleAddEntireLook = () => {
@@ -247,14 +304,47 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14">
           {/* LEFT: Multi-Angle Gallery (7 cols) */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="relative aspect-[3/4] bg-[#EFECE6] border border-[#E5E0D8] overflow-hidden group">
+            <div className="relative aspect-[3/4] bg-white border border-[#E5E0D8] rounded-[3px] overflow-hidden group shadow-xs flex items-center justify-center">
               <img
                 src={product.images[selectedImageIndex] || product.thumbnail}
                 alt={product.name}
                 fetchPriority="high"
                 decoding="async"
-                className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-102"
+                className="w-full h-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-102"
               />
+
+              {/* Angle Navigation Arrows */}
+              {product.images.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : product.images.length - 1));
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-[#161616] flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity border border-[#E5E0D8] cursor-pointer"
+                    title="Previous angle"
+                    aria-label="Previous angle"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedImageIndex((prev) => (prev < product.images.length - 1 ? prev + 1 : 0));
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-[#161616] flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity border border-[#E5E0D8] cursor-pointer"
+                    title="Next angle"
+                    aria-label="Next angle"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                  <span className="absolute bottom-3 right-3 px-2.5 py-0.5 text-[11px] font-mono font-medium bg-black/60 text-white rounded-[2px] backdrop-blur-xs select-none">
+                    {selectedImageIndex + 1} / {product.images.length}
+                  </span>
+                </>
+              )}
 
               {/* Wishlist Button */}
               <button
@@ -267,24 +357,26 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
               </button>
             </div>
 
-            {/* Thumbnail Selectors */}
+            {/* Thumbnail Selectors: Edge-to-Edge & Perfectly Fitted */}
             {product.images.length > 1 && (
-              <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3 pt-1">
                 {product.images.map((img, idx) => (
                   <button
                     key={idx}
                     onClick={() => setSelectedImageIndex(idx)}
-                    className={`relative aspect-[3/4] bg-[#EFECE6] border overflow-hidden transition-all ${selectedImageIndex === idx
-                        ? "border-[#1A3B8B] ring-2 ring-[#1A3B8B]/20"
-                        : "border-[#E5E0D8] opacity-80 hover:opacity-100"
-                      }`}
+                    className={`relative aspect-[3/4] bg-white border-2 overflow-hidden rounded-[2px] transition-all cursor-pointer ${
+                      selectedImageIndex === idx
+                        ? "border-[#1A3B8B] ring-2 ring-[#1A3B8B]/20 opacity-100 scale-102 shadow-sm"
+                        : "border-[#E5E0D8] opacity-75 hover:opacity-100 hover:border-[#A09D96]"
+                    }`}
+                    title={`View angle ${idx + 1}`}
                   >
                     <img
                       src={img}
                       alt={`${product.name} view ${idx + 1}`}
                       loading="lazy"
                       decoding="async"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover object-top"
                     />
                   </button>
                 ))}
@@ -301,13 +393,42 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   {product.department ? `${product.department.toUpperCase()} • ` : ""}
                   {(product.category || "").replace(/-/g, " ").toUpperCase()}
                 </span>
-                {product.rating && (
-                  <div className="flex items-center gap-1.5 text-xs font-mono text-[#6E6D68]">
-                    <Star className="w-3.5 h-3.5 fill-[#1A3B8B] text-[#1A3B8B]" />
-                    <span className="font-semibold text-[#161616]">{product.rating}</span>
-                    <span>({product.reviewsCount || 12} reviews)</span>
-                  </div>
-                )}
+                {/* Genuine Customer Reviews Option (Clickable to read or write) */}
+                <button
+                  type="button"
+                  onClick={() => setIsReviewModalOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-mono text-[#6E6D68] hover:text-[#1A3B8B] transition-colors cursor-pointer group"
+                  title={
+                    activeReviewsCount > 0
+                      ? "Read verified customer reviews or write one"
+                      : "Write the first review for this product"
+                  }
+                >
+                  <Star
+                    className={`w-3.5 h-3.5 transition-colors ${
+                      activeReviewsCount > 0
+                        ? "fill-[#1A3B8B] text-[#1A3B8B]"
+                        : "text-[#8C887E] group-hover:text-[#1A3B8B]"
+                    }`}
+                  />
+                  {activeReviewsCount > 0 ? (
+                    <>
+                      <span className="font-semibold text-[#161616]">{activeRating.toFixed(1)}</span>
+                      <span className="underline decoration-[#E5E0D8] group-hover:decoration-[#1A3B8B]">
+                        ({activeReviewsCount} {activeReviewsCount === 1 ? "review" : "reviews"})
+                      </span>
+                      <span className="text-[#1A3B8B] font-medium ml-1">· Write a review</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-[#8C887E]">0</span>
+                      <span>(0 reviews)</span>
+                      <span className="text-[#1A3B8B] font-medium underline decoration-[#1A3B8B]/40 group-hover:decoration-[#1A3B8B] ml-1">
+                        · Write a review
+                      </span>
+                    </>
+                  )}
+                </button>
               </div>
 
               {/* Title & Subtitle */}
@@ -322,19 +443,42 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 )}
               </div>
 
-              {/* Price & GST */}
-              <div className="flex items-baseline gap-4 py-2 border-b border-[#E5E0D8]">
-                <span className="text-3xl font-mono font-medium text-[#161616]">
-                  {formatPrice(product.price)}
-                </span>
+              {/* Price Structure — Luxury Reference Style */}
+              <div className="py-3.5 border-b border-[#E5E0D8] space-y-1.5">
+                {/* Main Price Row with Discount % */}
+                <div className="flex items-baseline gap-3">
+                  {product.originalPrice && product.originalPrice > product.price && (
+                    <span className="text-3xl sm:text-4xl font-normal text-[#CC0C39] tracking-tight font-headline">
+                      -{Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}%
+                    </span>
+                  )}
+                  <div className="flex items-baseline">
+                    <span className="text-lg sm:text-xl font-medium text-[#161616] mr-0.5 align-super">
+                      ₹
+                    </span>
+                    <span className="text-3xl sm:text-4xl font-bold font-headline tracking-tight text-[#161616]">
+                      {product.price.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                </div>
+
+                {/* M.R.P. & Savings Row */}
                 {product.originalPrice && product.originalPrice > product.price && (
-                  <span className="text-base font-mono line-through text-[#6E6D68]">
-                    {formatPrice(product.originalPrice)}
-                  </span>
+                  <div className="flex items-center gap-1.5 text-xs text-[#565959] font-body">
+                    <span>M.R.P.:</span>
+                    <span className="line-through text-[#6E6D68] font-mono">
+                      {formatPrice(product.originalPrice)}
+                    </span>
+                    <span className="text-[11px] font-mono text-emerald-700 font-semibold ml-1.5 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
+                      Save ₹{(product.originalPrice - product.price).toLocaleString("en-IN")}
+                    </span>
+                  </div>
                 )}
-                <span className="px-2 py-0.5 text-[10px] font-mono uppercase bg-[#1A3B8B]/10 border border-[#1A3B8B]/20 text-[#1A3B8B] font-semibold">
+
+                {/* Tax Note */}
+                <p className="text-xs text-[#161616] font-medium font-body pt-0.5">
                   Inclusive of all taxes
-                </span>
+                </p>
               </div>
 
               {/* Description */}
@@ -352,33 +496,26 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                       Color
                     </span>
                     <span className="text-[#161616] font-medium">
-                      {selectedColor?.name || "Atelier White"}
+                      {selectedColor?.name || "Classic White"}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
-                    {product.colors.map((rawColor) => {
-                      const isBlack =
-                        rawColor.name?.toLowerCase().includes("black") ||
-                        rawColor.hex?.toLowerCase() === "#0a0a0a" ||
-                        rawColor.hex?.toLowerCase() === "#000000" ||
-                        rawColor.hex?.toLowerCase() === "#161616";
-                      const color = isBlack
-                        ? { name: "Atelier White", hex: "#FFFFFF", bgClass: "bg-white" }
-                        : rawColor;
-
-                      const isSelected = selectedColor?.hex === color.hex || (selectedColor?.hex === "#FFFFFF" && isBlack);
+                    {product.colors.map((color) => {
+                      const isSelected =
+                        selectedColor?.hex?.toLowerCase() === color.hex?.toLowerCase() &&
+                        selectedColor?.name?.toLowerCase() === color.name?.toLowerCase();
 
                       return (
                         <button
                           key={color.hex + color.name}
                           onClick={() => setSelectedColor(color)}
                           style={{ backgroundColor: color.hex }}
-                          className={`w-7 h-7 rounded-full border-2 transition-transform ${
+                          className={`w-7 h-7 rounded-full border-2 transition-transform cursor-pointer ${
                             isSelected
-                              ? "border-[#1A3B8B] scale-110 shadow-xs ring-2 ring-[#1A3B8B]/20"
+                              ? "border-[#1A3B8B] scale-110 shadow-md ring-2 ring-[#1A3B8B]/30"
                               : "border-[#D5D0C8] hover:scale-105 shadow-xs"
                           }`}
-                          title={color.name}
+                          title={`${color.name} (${color.hex})`}
                         />
                       );
                     })}
@@ -445,55 +582,71 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
               {/* Quantity and Primary Buy Actions */}
               <div className="space-y-3 pt-4 border-t border-[#E5E0D8]">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  {/* Quantity selector */}
-                  {!isOutOfStock && (
-                    <div className="flex items-center border border-[#E5E0D8] bg-white">
-                      <button
-                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                        disabled={quantity <= 1}
-                        className="px-3.5 py-3 text-sm text-[#6E6D68] hover:text-[#161616] disabled:opacity-30 disabled:cursor-not-allowed"
-                        aria-label="Decrease quantity"
-                      >
-                        -
-                      </button>
-                      <span className="px-4 py-3 text-xs font-mono font-medium text-[#161616]">
-                        {quantity}
-                      </span>
-                      <button
-                        onClick={() => setQuantity(Math.min(maxAllowedQty, quantity + 1))}
-                        disabled={quantity >= maxAllowedQty}
-                        className="px-3.5 py-3 text-sm text-[#6E6D68] hover:text-[#161616] disabled:opacity-30 disabled:cursor-not-allowed"
-                        aria-label="Increase quantity"
-                      >
-                        +
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Primary Add to Cart */}
-                  <button
-                    disabled={isOutOfStock}
-                    onClick={handleAddToCart}
-                    className={`flex-1 py-3.5 px-6 font-body text-xs font-medium uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${isOutOfStock
-                        ? "bg-[#D5D0C8] text-[#8C887E] cursor-not-allowed"
-                        : "bg-[#1A3B8B] hover:bg-[#142e6d] text-white shadow-sm"
-                      }`}
-                  >
-                    {isOutOfStock ? (
-                      <span>Sold Out</span>
-                    ) : addedToCartSuccess ? (
-                      <>
-                        <Check className="w-4 h-4 text-white" />
-                        <span>Added to Shopping Bag</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingBag className="w-4 h-4 text-white" />
-                        <span>Add to Bag · {formatPrice(product.price * quantity)}</span>
-                      </>
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex items-center gap-2.5">
+                    {/* Quantity selector */}
+                    {!isOutOfStock && (
+                      <div className="flex items-center border border-[#E5E0D8] bg-white h-12 shrink-0">
+                        <button
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          disabled={quantity <= 1}
+                          className="px-3.5 h-full text-sm text-[#6E6D68] hover:text-[#161616] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          aria-label="Decrease quantity"
+                        >
+                          -
+                        </button>
+                        <span className="px-3.5 text-xs font-mono font-medium text-[#161616]">
+                          {quantity}
+                        </span>
+                        <button
+                          onClick={() => setQuantity(Math.min(maxAllowedQty, quantity + 1))}
+                          disabled={quantity >= maxAllowedQty}
+                          className="px-3.5 h-full text-sm text-[#6E6D68] hover:text-[#161616] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          aria-label="Increase quantity"
+                        >
+                          +
+                        </button>
+                      </div>
                     )}
-                  </button>
+
+                    {/* Primary Add to Bag */}
+                    <button
+                      disabled={isOutOfStock}
+                      onClick={handleAddToCart}
+                      className={`flex-1 h-12 px-4 border-2 font-body text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer rounded-[2px] ${
+                        isOutOfStock
+                          ? "border-[#D5D0C8] bg-[#FAF8F5] text-[#8C887E] cursor-not-allowed"
+                          : "border-[#1A3B8B] text-[#1A3B8B] bg-white hover:bg-[#1A3B8B]/5 active:scale-[0.99]"
+                      }`}
+                    >
+                      {isOutOfStock ? (
+                        <span>Sold Out</span>
+                      ) : addedToCartSuccess ? (
+                        <>
+                          <Check className="w-4 h-4 text-[#1A3B8B]" />
+                          <span>Added to Bag</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingBag className="w-4 h-4 text-[#1A3B8B]" />
+                          <span>Add to Bag</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* High-Converting BUY NOW (Instant Checkout) */}
+                  {!isOutOfStock && (
+                    <button
+                      onClick={handleBuyNow}
+                      className="w-full h-12 px-6 bg-[#1A3B8B] hover:bg-[#142e6d] active:scale-[0.99] text-white font-body text-xs font-bold uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-2.5 shadow-md hover:shadow-lg cursor-pointer rounded-[2px]"
+                      title="Buy Now with 1-Click Instant Checkout"
+                    >
+                      <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                      <span>Buy Now · {formatPrice(product.price * quantity)}</span>
+                      <ArrowRight className="w-4 h-4 ml-0.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -522,11 +675,15 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
               <div className="grid grid-cols-2 gap-3 text-xs font-body">
                 <div>
                   <span className="text-[#6E6D68] block text-[11px]">Material</span>
-                  <span className="text-[#161616] font-medium">{product.material || "Quality Fabric"}</span>
+                  <span className="text-[#161616] font-medium">
+                    {(product.material || "Quality Fabric").replace(/silhouette/gi, "Product").replace(/atelier/gi, "Studio")}
+                  </span>
                 </div>
                 <div>
                   <span className="text-[#6E6D68] block text-[11px]">Fit</span>
-                  <span className="text-[#161616] font-medium">{product.fit || "Standard Fit"}</span>
+                  <span className="text-[#161616] font-medium">
+                    {(product.fit || "Standard Fit").replace(/\bsilhouette\b/gi, "Fit").replace(/\bBoxy Product\b/gi, "Boxy Fit").replace(/\batelier\b/gi, "Studio")}
+                  </span>
                 </div>
                 {product.weightGsm && (
                   <div>
@@ -536,7 +693,9 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 )}
                 <div>
                   <span className="text-[#6E6D68] block text-[11px]">Care</span>
-                  <span className="text-[#161616] font-medium">Machine wash cold</span>
+                  <span className="text-[#161616] font-medium">
+                    {(product.care || "Machine wash cold").replace(/silhouette/gi, "Product").replace(/atelier/gi, "Studio")}
+                  </span>
                 </div>
               </div>
             </div>
@@ -557,7 +716,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   Complete the Look
                 </h3>
                 <p className="text-sm text-[#6E6D68] font-body mt-1">
-                  Complementary pieces selected to pair with this silhouette.
+                  Complementary pieces selected to pair with this product.
                 </p>
               </div>
 
@@ -651,6 +810,17 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
           </section>
         )}
       </div>
+
+      {/* Verified Customer Reviews & Rating Modal */}
+      <ProductReviewModal
+        isOpen={isReviewModalOpen}
+        onClose={() => setIsReviewModalOpen(false)}
+        productId={product.id}
+        productName={product.name}
+        onReviewSubmitted={(updatedRating, updatedCount) => {
+          setReviewsStats({ rating: updatedRating, count: updatedCount });
+        }}
+      />
     </PageShell>
   );
 }

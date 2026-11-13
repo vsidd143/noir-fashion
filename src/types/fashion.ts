@@ -45,6 +45,7 @@ export type Product = {
   details: string[];
   material: string;
   fit: string;
+  care?: string;
   weightGsm?: number;
   isNew?: boolean;
   isLimited?: boolean;

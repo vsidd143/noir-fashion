@@ -401,3 +401,96 @@ function syncOrderToLocalStorage(
   return null;
 }
 
+/**
+ * Determines whether an order was processed via an Online Payment gateway (Razorpay / UPI / Cards / QR).
+ */
+export function isOnlineOrder(order: {
+  payment_method?: string | null;
+  payment_status?: string | null;
+}): boolean {
+  const method = (order.payment_method || "").toLowerCase();
+  const status = (order.payment_status || "").toLowerCase();
+
+  if (
+    method.includes("razorpay") ||
+    method.includes("online") ||
+    method.includes("card") ||
+    method.includes("upi") ||
+    method.includes("scanner") ||
+    method.includes("netbanking")
+  ) {
+    return true;
+  }
+
+  if (method.includes("cash") || method.includes("cod")) {
+    return false;
+  }
+
+  return status === "paid";
+}
+
+export interface RevenueMetrics {
+  totalRevenue: number;
+  onlineRevenue: number;
+  offlineRevenue: number;
+  onlineOrdersCount: number;
+  offlineOrdersCount: number;
+  totalRealizedCount: number;
+  pendingCodCount: number;
+  pendingOnlineCount: number;
+}
+
+/**
+ * Computes live audited revenue metrics across Online (Razorpay) and Offline (COD) payment streams.
+ */
+export function computeRevenueBreakdown(
+  orders: {
+    status: string;
+    payment_method?: string | null;
+    payment_status?: string | null;
+    total_amount?: number | null;
+  }[]
+): RevenueMetrics {
+  // 1. Online Revenue: realized immediately upon completed transaction (payment_status === 'paid' or active processing)
+  const onlineOrders = orders.filter(
+    (o) =>
+      o.status !== "cancelled" &&
+      isOnlineOrder(o) &&
+      (o.payment_status === "paid" ||
+        ["confirmed", "processing", "shipped", "delivered"].includes(o.status))
+  );
+  const onlineRevenue = onlineOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+
+  // 2. Offline Revenue (Cash on Delivery): realized upon successful doorstep delivery or collection
+  const offlineOrders = orders.filter(
+    (o) =>
+      o.status !== "cancelled" &&
+      !isOnlineOrder(o) &&
+      (o.status === "delivered" || o.payment_status === "paid")
+  );
+  const offlineRevenue = offlineOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+
+  // 3. Combined Realized Revenue
+  const totalRevenue = onlineRevenue + offlineRevenue;
+
+  // Pending Fulfillment Counts
+  const pendingCodOrders = orders.filter(
+    (o) => !isOnlineOrder(o) && (o.status === "pending" || o.status === "confirmed")
+  );
+  const pendingOnlineOrders = orders.filter(
+    (o) => isOnlineOrder(o) && (o.status === "confirmed" || o.status === "processing")
+  );
+
+  return {
+    totalRevenue,
+    onlineRevenue,
+    offlineRevenue,
+    onlineOrdersCount: onlineOrders.length,
+    offlineOrdersCount: offlineOrders.length,
+    totalRealizedCount: onlineOrders.length + offlineOrders.length,
+    pendingCodCount: pendingCodOrders.length,
+    pendingOnlineCount: pendingOnlineOrders.length,
+  };
+}
+
+

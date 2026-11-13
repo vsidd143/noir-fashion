@@ -22,7 +22,7 @@ export default function NewsletterSection() {
       const res = await fetch("/api/newsletter/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), source: "atelier-archive" }),
+        body: JSON.stringify({ email: email.trim(), source: "studio-archive" }),
       });
 
       const data = await res.json();
@@ -64,7 +64,7 @@ export default function NewsletterSection() {
         </div>
 
         <h2 className="text-4xl sm:text-6xl font-black tracking-tight uppercase font-display text-white">
-          JOIN THE ATELIER ARCHIVE
+          JOIN THE STUDIO ARCHIVE
         </h2>
 
         <p className="mt-4 text-xs sm:text-sm text-neutral-400 max-w-lg mx-auto leading-relaxed">

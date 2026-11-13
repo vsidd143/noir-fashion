@@ -42,7 +42,7 @@ export default function StorefrontCollection({
   subcategories,
   defaultSort = "curated",
 }: StorefrontCollectionProps) {
-  const { addToCart, setQuickViewProduct, isInWishlist, toggleWishlist } = useCart();
+  const { addToCart, isInWishlist, toggleWishlist } = useCart();
   const { setCursor, resetCursor } = useCursor();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -403,13 +403,6 @@ export default function StorefrontCollection({
                         </span>
                       )}
                       <div className="ml-auto pointer-events-auto flex items-center gap-1.5">
-                        <button
-                          onClick={() => setQuickViewProduct(product)}
-                          className="p-2 bg-white/90 hover:bg-[#1A3B8B] hover:text-white text-[#161616] rounded-full border border-[#E5E0D8] transition-all cursor-pointer shadow-xs"
-                          aria-label="Quick View"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
                         <button
                           onClick={() => toggleWishlist(product.id, product)}
                           className={`p-2 rounded-full border transition-all cursor-pointer shadow-xs ${

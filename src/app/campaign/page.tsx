@@ -54,7 +54,7 @@ export default function CampaignPage() {
               <span>SPATIAL AUDIO SOUNDTRACK INCLUDED</span>
             </span>
             <span>•</span>
-            <span>DIRECTED BY NOIR ATELIER</span>
+            <span>DIRECTED BY NOIR STUDIO</span>
           </motion.div>
         </div>
       </section>

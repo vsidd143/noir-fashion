@@ -12,7 +12,7 @@ const CAMPAIGN_SCENES = [
     tag: "SCENE 01 // NOCTURNAL METROPOLIS",
     title: "SHADOW product",
     image: "https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=1800&q=85",
-    subtitle: "Heavy 480 GSM loopback cotton silhouetted against evening rain.",
+    subtitle: "Heavy 480 GSM loopback cotton highlighted against evening rain.",
   },
   {
     id: "scene2",

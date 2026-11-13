@@ -30,7 +30,7 @@ export default function ProductSnapStrip({ products }: ProductSnapStripProps) {
         <div className="w-full overflow-x-auto no-scrollbar snap-x snap-mandatory flex gap-4 sm:gap-6 pb-6 pt-1 scroll-smooth">
           {products.map((product, idx) => {
             const primaryImg =
-              product.images?.[0] || product.thumbnail || "/images/placeholder-silhouette.png";
+              product.images?.[0] || product.thumbnail || "/images/placeholder-product.png";
             const productHref = `/product/${product.id}`;
 
             return (
@@ -54,7 +54,7 @@ export default function ProductSnapStrip({ products }: ProductSnapStripProps) {
                     priority={idx < 2}
                     onError={(e) => {
                       const target = e.currentTarget as HTMLImageElement;
-                      target.src = "/images/placeholder-silhouette.png";
+                      target.src = "/images/placeholder-product.png";
                     }}
                   />
 

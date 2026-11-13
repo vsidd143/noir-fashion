@@ -25,7 +25,7 @@ async function authenticateAdminRequest(request: Request) {
   const isAdmin = (profile?.role === "admin" && !profile?.is_blocked) || isEmailAdmin;
 
   if (!isAdmin) {
-    return { user, isAdmin: false, error: "Forbidden: Master Atelier Administrator privileges required.", status: 403 };
+    return { user, isAdmin: false, error: "Forbidden: Master Administrator privileges required.", status: 403 };
   }
 
   return { user, isAdmin: true, error: null, status: 200 };
@@ -155,7 +155,7 @@ export async function PUT(
       await supabase.from("product_variants").insert(variantRecords);
     }
 
-    return NextResponse.json({ success: true, message: "Product silhouette updated successfully." });
+    return NextResponse.json({ success: true, message: "Product updated successfully." });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal product update error";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -229,7 +229,7 @@ export async function DELETE(
     return NextResponse.json({
       success: true,
       action: "deleted",
-      message: "Product silhouette permanently deleted from Supabase.",
+      message: "Product permanently deleted from Supabase.",
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal product deletion error";

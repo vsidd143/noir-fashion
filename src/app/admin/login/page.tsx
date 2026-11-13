@@ -117,7 +117,7 @@ export default function AdminLoginPage() {
             NOIR
           </span>
           <span className="block text-[9px] tracking-[0.3em] text-[#c5a46d] uppercase font-mono mt-0.5">
-            ATELIER // MASTER SECURITY GATEWAY
+            SECURITY GATEWAY
           </span>
         </div>
 
@@ -164,7 +164,7 @@ export default function AdminLoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@atelier-noir.com"
+                placeholder="admin@noir-fashion.com"
                 className="w-full bg-black border border-white/15 px-4 py-3 text-white focus:outline-none focus:border-[#c5a46d] transition-colors"
               />
             </div>
@@ -215,7 +215,7 @@ export default function AdminLoginPage() {
 
       {/* Footer */}
       <footer className="relative z-10 text-center text-[10px] font-mono tracking-widest uppercase text-neutral-600 border-t border-white/5 pt-6">
-        <span>NOIR ATELIER // ENCRYPTED SESSION · RBAC STRICT ISOLATION</span>
+        <span>NOIR // ENCRYPTED SESSION · RBAC STRICT ISOLATION</span>
       </footer>
     </div>
   );

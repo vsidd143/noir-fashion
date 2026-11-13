@@ -52,8 +52,6 @@ export default function RazorpayModal({
   const [cardCvv, setCardCvv] = useState<string>("784");
   const [cardHolder, setCardHolder] = useState<string>(customerName || "NOIR PATRON");
 
-  if (!isOpen) return null;
-
   const handleSimulatePayment = (methodName: string) => {
     setIsProcessing(true);
     setTimeout(() => {
@@ -68,25 +66,28 @@ export default function RazorpayModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-        {/* Backdrop */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={() => {
-            if (!isProcessing) onClose();
-          }}
-          className="fixed inset-0 bg-black/85 backdrop-blur-md"
-        />
+      {isOpen && (
+        <div key="razorpay-overlay" className="fixed inset-0 z-[400] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          {/* Backdrop */}
+          <motion.div
+            key="razorpay-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              if (!isProcessing) onClose();
+            }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md"
+          />
 
-        {/* Razorpay Gateway Modal Dialog */}
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0, y: 15 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.95, opacity: 0, y: 15 }}
-          className="relative w-full max-w-lg bg-[#FAF8F5] border border-[#E5E0D8] shadow-2xl rounded-[4px] overflow-hidden my-auto z-10 text-[#161616]"
-        >
+          {/* Razorpay Gateway Modal Dialog */}
+          <motion.div
+            key="razorpay-dialog"
+            initial={{ scale: 0.95, opacity: 0, y: 15 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 15 }}
+            className="relative w-full max-w-lg bg-[#FAF8F5] border border-[#E5E0D8] shadow-2xl rounded-[4px] overflow-hidden my-auto z-10 text-[#161616]"
+          >
           {/* Header Bar */}
           <div className="bg-[#1A3B8B] text-white p-4 sm:p-5 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -103,7 +104,7 @@ export default function RazorpayModal({
                   </span>
                 </div>
                 <p className="text-[11px] font-mono text-white/80">
-                  NOIR Atelier · Order #{orderNumber}
+                  NOIR Studio · Order #{orderNumber}
                 </p>
               </div>
             </div>
@@ -441,7 +442,8 @@ export default function RazorpayModal({
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
-  );
+    )}
+  </AnimatePresence>
+);
 }
 

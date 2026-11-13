@@ -137,7 +137,7 @@ export default function WishlistPage() {
                         href={`/product/${product.id}`}
                         className="w-full py-2 border border-white/10 hover:border-white text-neutral-400 hover:text-white text-[11px] font-mono uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors block text-center"
                       >
-                        <span>Inspect Silhouette</span>
+                        <span>View Product</span>
                         <ArrowRight className="w-3 h-3" />
                       </Link>
                     </div>

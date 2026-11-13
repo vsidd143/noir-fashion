@@ -47,7 +47,7 @@ export default function WishlistDrawer() {
                 <div>
                   <h2 className="text-xl font-bold tracking-widest text-white uppercase font-display flex items-center gap-2">
                     <Heart className="w-5 h-5 text-rose-500 fill-current" />
-                    Saved Atelier Pieces
+                    Saved Wishlist Items
                   </h2>
                   <p className="text-[11px] tracking-wider text-[#a0a0a0] uppercase font-mono mt-0.5">
                     {wishlist.length} {wishlist.length === 1 ? "Piece Saved" : "Pieces Saved"}
@@ -70,7 +70,7 @@ export default function WishlistDrawer() {
                       Your wishlist is empty.
                     </h3>
                     <p className="text-xs text-neutral-500 mt-2 max-w-xs">
-                      Tap the heart icon on any runway silhouette to save it to your private atelier moodboard.
+                      Tap the heart icon on any product to save it to your wishlist.
                     </p>
                   </div>
                 ) : (

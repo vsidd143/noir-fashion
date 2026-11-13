@@ -25,7 +25,7 @@ async function authenticateAdminRequest(request: Request) {
   const isAdmin = (profile?.role === "admin" && !profile?.is_blocked) || isEmailAdmin;
 
   if (!isAdmin) {
-    return { user, isAdmin: false, error: "Forbidden: Master Atelier Administrator privileges required.", status: 403 };
+    return { user, isAdmin: false, error: "Forbidden: Master Administrator privileges required.", status: 403 };
   }
 
   return { user, isAdmin: true, error: null, status: 200 };
@@ -174,7 +174,7 @@ export async function POST(request: Request) {
         is_featured: Boolean(is_featured),
         is_best_seller: Boolean(is_best_seller),
         is_limited: Boolean(is_limited),
-        rating: 5.0,
+        rating: 0,
         reviews_count: 0,
         tags: finalTags,
         details: details.length > 0 ? details : ["Hand-finished construction", "Pre-shrunk architectural drape"],

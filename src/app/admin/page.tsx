@@ -17,6 +17,7 @@ import {
   DbProduct,
 } from "@/lib/products-service";
 import { exportOrdersToCSV, calculateCustomerStats } from "@/lib/csv-export";
+import { isOnlineOrder, computeRevenueBreakdown } from "@/lib/orders-service";
 import { AnalyticsOrder } from "@/lib/analytics-engine";
 import SalesAnalyticsDashboard from "@/components/admin/SalesAnalyticsDashboard";
 import ProductManagementSection from "@/components/admin/ProductManagementSection";
@@ -57,6 +58,8 @@ import {
   Eye,
   ChevronDown,
   Clock,
+  CreditCard,
+  Truck,
 } from "lucide-react";
 
 type AdminSection =
@@ -201,7 +204,7 @@ export default function AdminDashboard() {
           if (isMounted) {
             setAuthStatus("unauthorized");
             setUnauthorizedReason(
-              "Access Denied: Your account is registered as a customer and does not possess master atelier privileges."
+              "Access Denied: Your account is registered as a customer and does not possess administrator privileges."
             );
           }
           return;
@@ -258,7 +261,7 @@ export default function AdminDashboard() {
   const [newProdPrice, setNewProdPrice] = useState<number>(7999);
   const [newProdRegularPrice, setNewProdRegularPrice] = useState<number>(9999);
   const [newProdMaterial, setNewProdMaterial] = useState("480 GSM Loopback French Terry Cotton");
-  const [newProdFit, setNewProdFit] = useState("Oversized Boxy Silhouette");
+  const [newProdFit, setNewProdFit] = useState("Oversized Boxy Fit");
   const [newProdSku, setNewProdSku] = useState("");
   const [newProdStock, setNewProdStock] = useState<number>(15);
   const [newProdSizes, setNewProdSizes] = useState("S, M, L, XL, XXL");
@@ -276,8 +279,12 @@ export default function AdminDashboard() {
 
   // Orders Management & Search State
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>("all");
+  const [orderPaymentFilter, setOrderPaymentFilter] = useState<"all" | "online" | "cod">("all");
   const [orderSearchQuery, setOrderSearchQuery] = useState<string>("");
   const [customerSearchQuery, setCustomerSearchQuery] = useState<string>("");
+
+  // Executive Revenue View Mode (Total, Online Razorpay, Offline COD)
+  const [revenueView, setRevenueView] = useState<"total" | "online" | "offline">("total");
 
   // Category Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -322,8 +329,8 @@ export default function AdminDashboard() {
 
   // Store Settings State
   const [storeSettings, setStoreSettings] = useState({
-    storeName: "NOIR ATELIER // INDIA",
-    supportEmail: "care@atelier-noir.in",
+    storeName: "NOIR STUDIO // INDIA",
+    supportEmail: "care@noir-studio.in",
     enableCod: true,
     gstPercentage: 12,
     freeShippingThreshold: 0,
@@ -591,7 +598,7 @@ export default function AdminDashboard() {
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProdName.trim()) {
-      showNotification("error", "Product silhouette name is required.");
+      showNotification("error", "Product name is required.");
       return;
     }
 
@@ -643,7 +650,7 @@ export default function AdminDashboard() {
       is_new_arrival: newProdIsNew,
       is_best_seller: newProdIsBestSeller,
       tags: newProdTags.split(",").map((t) => t.trim()).filter(Boolean),
-      details: ["Hand finished in Mumbai Atelier", "Pre-shrunk structural weave", "Articulated anatomical cut"],
+      details: ["Hand finished in Mumbai Studio", "Pre-shrunk structural weave", "Articulated anatomical cut"],
       images: imagesToSave,
       variants: variantList,
     };
@@ -651,9 +658,9 @@ export default function AdminDashboard() {
     const res = await createProductInDb(payload);
     if (res.data) {
       if (res.isRlsRestricted) {
-        showNotification("success", `Silhouette "${newProdName}" saved! Run the 5-line RLS unlock query in Supabase SQL editor to sync permanently.`);
+        showNotification("success", `Product "${newProdName}" saved! Run the 5-line RLS unlock query in Supabase SQL editor to sync permanently.`);
       } else {
-        showNotification("success", `Silhouette "${newProdName}" successfully registered to Supabase!`);
+        showNotification("success", `Product "${newProdName}" successfully registered to Supabase!`);
       }
       // Reset form
       setNewProdName("");
@@ -687,7 +694,7 @@ export default function AdminDashboard() {
     const success = await archiveProductInDb(prodId);
     if (success) {
       setProductsList((prev) => prev.filter((p) => p.id !== prodId));
-      showNotification("success", `Silhouette "${prodName}" archived safely.`);
+      showNotification("success", `Product "${prodName}" archived safely.`);
     } else {
       showNotification("error", "Failed to archive product.");
     }
@@ -712,36 +719,59 @@ export default function AdminDashboard() {
       setProductsList((prev) =>
         prev.map((p) => (p.id === editingProduct.id ? { ...p, ...editingProduct } : p))
       );
-      showNotification("success", `Silhouette "${editingProduct.name}" updated successfully.`);
+      showNotification("success", `Product "${editingProduct.name}" updated successfully.`);
       setEditingProduct(null);
     } else {
-      showNotification("error", res.error || "Failed to update silhouette.");
+      showNotification("error", res.error || "Failed to update product.");
     }
   };
 
   // -------------------------------------------------------------
-  // ORDER MANAGEMENT (COD Pipeline)
+  // ORDER MANAGEMENT (Online & COD Pipeline)
   // -------------------------------------------------------------
   const handleUpdateOrderStatus = async (
     orderId: string,
     newStatus: OrderItem["status"]
   ) => {
+    const isDelivered = newStatus === "delivered";
+    const paymentStatusUpdate = isDelivered ? "paid" : newStatus === "cancelled" ? "cancelled" : undefined;
+
     // 1. Update local storage orders if stored locally
     if (typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem("noir_local_orders");
         if (stored) {
           const ords: OrderItem[] = JSON.parse(stored);
-          const updated = ords.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
+          const updated = ords.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  status: newStatus,
+                  ...(paymentStatusUpdate ? { payment_status: paymentStatusUpdate } : {}),
+                }
+              : o
+          );
           localStorage.setItem("noir_local_orders", JSON.stringify(updated));
         }
       } catch { }
     }
 
     try {
-      await supabase.from("orders").update({ status: newStatus }).eq("id", orderId);
+      const dbUpdates: Record<string, string> = { status: newStatus };
+      if (paymentStatusUpdate) {
+        dbUpdates.payment_status = paymentStatusUpdate;
+      }
+      await supabase.from("orders").update(dbUpdates).eq("id", orderId);
       setOrdersList((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: newStatus,
+                ...(paymentStatusUpdate ? { payment_status: paymentStatusUpdate } : {}),
+              }
+            : o
+        )
       );
       showNotification("success", `Order status updated to ${newStatus.toUpperCase()}`);
     } catch {
@@ -1170,7 +1200,7 @@ export default function AdminDashboard() {
     { id: "add-product", label: "Add Product", icon: PlusCircle },
     { id: "categories", label: "Categories", icon: Layers, badge: categoriesList.length },
     { id: "product-types", label: "Product Types", icon: FolderTree, badge: productTypesList.length },
-    { id: "orders", label: "Orders (COD)", icon: ShoppingBag, badge: ordersList.length },
+    { id: "orders", label: "Customer Orders", icon: ShoppingBag, badge: ordersList.length },
     { id: "customers", label: "Customers", icon: Users, badge: usersList.length },
     { id: "inventory", label: "Inventory", icon: Boxes },
     { id: "coupons", label: "Coupons", icon: Tag, badge: couponsList.length },
@@ -1178,11 +1208,19 @@ export default function AdminDashboard() {
     { id: "settings", label: "Settings", icon: Settings },
   ];
 
-  const totalRevenue = ordersList
-    .filter((o) => o.status === "delivered" || o.status === "shipped")
-    .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+  // Comprehensive Revenue & Fulfillment Breakdown (Online Razorpay vs. Offline COD)
+  const revMetrics = computeRevenueBreakdown(ordersList);
+  const totalRevenue = revMetrics.totalRevenue;
+  const onlineRevenue = revMetrics.onlineRevenue;
+  const offlineRevenue = revMetrics.offlineRevenue;
 
-  const pendingCodOrders = ordersList.filter((o) => o.status === "pending" || o.status === "confirmed");
+  const pendingCodOrders = ordersList.filter(
+    (o) => !isOnlineOrder(o) && (o.status === "pending" || o.status === "confirmed")
+  );
+  const pendingOnlineOrders = ordersList.filter(
+    (o) => isOnlineOrder(o) && (o.status === "confirmed" || o.status === "processing")
+  );
+
   const lowStockProducts = productsList.filter((p) => (p.stock_quantity ?? 0) <= 5);
 
   if (authStatus === "checking") {
@@ -1192,7 +1230,7 @@ export default function AdminDashboard() {
         <div className="w-10 h-10 border-2 border-[#c5a46d]/20 border-t-[#c5a46d] rounded-full animate-spin mb-4" />
         <span className="text-xl font-display font-black tracking-[0.3em] text-white uppercase">NOIR</span>
         <span className="text-[10px] font-mono tracking-widest text-[#c5a46d] uppercase mt-2">
-          AUTHENTICATING ATELIER ACCESS...
+          AUTHENTICATING STUDIO ACCESS...
         </span>
       </div>
     );
@@ -1208,7 +1246,7 @@ export default function AdminDashboard() {
           </div>
           <h2 className="text-xl font-bold font-display uppercase tracking-widest text-white mb-2">ACCESS RESTRICTED</h2>
           <p className="text-xs text-neutral-400 font-sans mb-6">
-            {unauthorizedReason || "Master Administrator privileges required to access the Atelier Command Center."}
+            {unauthorizedReason || "Master Administrator privileges required to access the Studio Command Center."}
           </p>
           <div className="flex flex-col gap-3">
             <Link
@@ -1422,28 +1460,144 @@ export default function AdminDashboard() {
 
                 <div className="p-5 bg-[#0a0a0a] border border-white/10 space-y-2">
                   <div className="flex items-center justify-between text-neutral-400">
-                    <span className="text-[10px] font-mono uppercase tracking-widest">COD Orders Pending</span>
+                    <span className="text-[10px] font-mono uppercase tracking-widest">Pending Fulfillment</span>
                     <ShoppingBag className="w-4 h-4 text-amber-400" />
                   </div>
                   <div className="text-3xl font-black font-mono text-amber-400">
-                    {pendingCodOrders.length}
+                    {revMetrics.pendingCodCount + revMetrics.pendingOnlineCount}
                   </div>
                   <span className="text-[10px] font-mono text-neutral-500 block">
-                    {ordersList.length} Total Registered Orders
+                    {revMetrics.pendingCodCount} COD · {revMetrics.pendingOnlineCount} Online Paid ({ordersList.length} Total)
                   </span>
                 </div>
 
-                <div className="p-5 bg-[#0a0a0a] border border-white/10 space-y-2">
-                  <div className="flex items-center justify-between text-neutral-400">
-                    <span className="text-[10px] font-mono uppercase tracking-widest">Realized Revenue</span>
-                    <Banknote className="w-4 h-4 text-emerald-400" />
+                {/* Realized Revenue Card with Online, Offline (COD), and Total options */}
+                <div className="p-5 bg-[#0a0a0a] border border-white/10 space-y-3 relative group">
+                  {/* Header Row with Label & Option Switcher */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-neutral-400">
+                      <Banknote className="w-4 h-4 text-emerald-400" />
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-white font-bold">
+                        Realized Revenue
+                      </span>
+                    </div>
+
+                    {/* Interactive Selector Pills: Total | Online | Offline */}
+                    <div className="flex items-center bg-black p-0.5 border border-white/15 rounded text-[9px] font-mono uppercase tracking-wider">
+                      <button
+                        type="button"
+                        onClick={() => setRevenueView("total")}
+                        className={`px-2 py-0.5 transition-all cursor-pointer rounded-xs ${
+                          revenueView === "total"
+                            ? "bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                        title="Show Combined Total Realized Revenue"
+                      >
+                        Total
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRevenueView("online")}
+                        className={`px-2 py-0.5 transition-all cursor-pointer rounded-xs ${
+                          revenueView === "online"
+                            ? "bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                        title="Show Razorpay Online Gateway Revenue"
+                      >
+                        Online
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRevenueView("offline")}
+                        className={`px-2 py-0.5 transition-all cursor-pointer rounded-xs ${
+                          revenueView === "offline"
+                            ? "bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                        title="Show Cash on Delivery (COD) Realized Revenue"
+                      >
+                        Offline
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-3xl font-black font-mono text-emerald-400">
-                    {formatPrice(totalRevenue)}
+
+                  {/* Dynamic Bold Value Display */}
+                  <div>
+                    <div
+                      className={`text-3xl font-black font-mono transition-colors ${
+                        revenueView === "total"
+                          ? "text-emerald-400"
+                          : revenueView === "online"
+                          ? "text-cyan-400"
+                          : "text-amber-400"
+                      }`}
+                    >
+                      {formatPrice(
+                        revenueView === "total"
+                          ? revMetrics.totalRevenue
+                          : revenueView === "online"
+                          ? revMetrics.onlineRevenue
+                          : revMetrics.offlineRevenue
+                      )}
+                    </div>
+                    <span className="text-[10px] font-mono text-neutral-400 block mt-0.5">
+                      {revenueView === "total" &&
+                        `Total Realized (${revMetrics.totalRealizedCount} Paid & Delivered)`}
+                      {revenueView === "online" &&
+                        `Razorpay Online Gateway (${revMetrics.onlineOrdersCount} Completed Payments)`}
+                      {revenueView === "offline" &&
+                        `Delivered Cash on Delivery (${revMetrics.offlineOrdersCount} Delivered Orders)`}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-mono text-neutral-500 block">
-                    Exclusively Delivered COD
-                  </span>
+
+                  {/* Dual Breakdown Summary Bar: Online vs Offline COD */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10 text-[10px] font-mono">
+                    <button
+                      type="button"
+                      onClick={() => setRevenueView("online")}
+                      className={`p-2 text-left rounded border transition-all cursor-pointer ${
+                        revenueView === "online"
+                          ? "bg-cyan-950/40 border-cyan-500/50 shadow-xs"
+                          : "bg-white/5 border-transparent hover:border-white/20"
+                      }`}
+                      title="Click to view Online Revenue"
+                    >
+                      <div className="flex items-center gap-1.5 text-neutral-400 text-[9px] uppercase tracking-wider">
+                        <CreditCard className="w-3 h-3 text-cyan-400" />
+                        <span>Online (Razorpay)</span>
+                      </div>
+                      <div className="text-sm font-bold text-cyan-400 mt-0.5">
+                        {formatPrice(revMetrics.onlineRevenue)}
+                      </div>
+                      <span className="text-[9px] text-neutral-500 block">
+                        {revMetrics.onlineOrdersCount} paid orders
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setRevenueView("offline")}
+                      className={`p-2 text-left rounded border transition-all cursor-pointer ${
+                        revenueView === "offline"
+                          ? "bg-amber-950/40 border-amber-500/50 shadow-xs"
+                          : "bg-white/5 border-transparent hover:border-white/20"
+                      }`}
+                      title="Click to view Offline COD Revenue"
+                    >
+                      <div className="flex items-center gap-1.5 text-neutral-400 text-[9px] uppercase tracking-wider">
+                        <Truck className="w-3 h-3 text-amber-400" />
+                        <span>Offline (COD)</span>
+                      </div>
+                      <div className="text-sm font-bold text-amber-400 mt-0.5">
+                        {formatPrice(revMetrics.offlineRevenue)}
+                      </div>
+                      <span className="text-[9px] text-neutral-500 block">
+                        {revMetrics.offlineOrdersCount} delivered
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="p-5 bg-[#0a0a0a] border border-white/10 space-y-2">
@@ -1508,41 +1662,55 @@ export default function AdminDashboard() {
 
               {/* Recent Orders & Low Stock */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Pending COD Orders */}
+                {/* Orders Pending Fulfillment */}
                 <div className="p-6 bg-[#0a0a0a] border border-white/10 space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold uppercase tracking-wider font-mono flex items-center gap-2">
                       <ShoppingBag className="w-4 h-4 text-[#c5a46d]" />
-                      Pending COD Orders ({pendingCodOrders.length})
+                      Orders Pending Fulfillment ({pendingCodOrders.length + pendingOnlineOrders.length})
                     </h3>
                     <button
                       onClick={() => setActiveSection("orders")}
-                      className="text-[10px] font-mono text-[#c5a46d] hover:underline uppercase"
+                      className="text-[10px] font-mono text-[#c5a46d] hover:underline uppercase cursor-pointer"
                     >
                       View All
                     </button>
                   </div>
-                  {pendingCodOrders.length === 0 ? (
+                  {pendingCodOrders.length + pendingOnlineOrders.length === 0 ? (
                     <div className="py-8 text-center text-xs font-mono text-neutral-500">
-                      No pending COD orders at this time.
+                      No pending orders at this time.
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {pendingCodOrders.slice(0, 4).map((ord) => (
-                        <div
-                          key={ord.id}
-                          className="p-3 bg-black border border-white/10 flex items-center justify-between text-xs font-mono"
-                        >
-                          <div>
-                            <span className="text-[#c5a46d] font-bold block">{ord.order_number}</span>
-                            <span className="text-neutral-400 text-[11px]">{ord.customer_name}</span>
+                      {[...pendingOnlineOrders, ...pendingCodOrders].slice(0, 4).map((ord) => {
+                        const isOnline = isOnlineOrder(ord);
+                        return (
+                          <div
+                            key={ord.id}
+                            className="p-3 bg-black border border-white/10 flex items-center justify-between text-xs font-mono"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[#c5a46d] font-bold">{ord.order_number}</span>
+                                {isOnline ? (
+                                  <span className="text-[9px] font-mono px-1 py-0.2 bg-cyan-950/80 text-cyan-400 border border-cyan-500/30 uppercase font-bold">
+                                    Online
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-mono px-1 py-0.2 bg-amber-950/80 text-amber-400 border border-amber-500/30 uppercase font-bold">
+                                    COD
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-neutral-400 text-[11px] block mt-0.5">{ord.customer_name}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-white font-bold block">{formatPrice(ord.total_amount)}</span>
+                              <span className="text-[10px] text-amber-400 uppercase tracking-wider">{ord.status}</span>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <span className="text-white font-bold block">{formatPrice(ord.total_amount)}</span>
-                            <span className="text-[10px] text-amber-400 uppercase tracking-wider">{ord.status}</span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1904,8 +2072,8 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
-              {/* Search & Filter Toolbar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 font-mono text-xs">
+              {/* Search & Filter Toolbar with Payment Method Filter */}
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 font-mono text-xs">
                 <div className="relative flex-1 max-w-md">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
                   <input
@@ -1924,26 +2092,49 @@ export default function AdminDashboard() {
                     </button>
                   )}
                 </div>
-                <div className="text-[11px] text-neutral-400 flex items-center gap-2">
-                  <span>
-                    Showing{" "}
-                    <strong className="text-white">
-                      {
-                        ordersList.filter((ord) => {
-                          const matchesStatus = orderStatusFilter === "all" || ord.status === orderStatusFilter;
-                          const matchesSearch =
-                            !orderSearchQuery ||
-                            ord.order_number.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
-                            ord.customer_name.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
-                            ord.customer_email.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
-                            (ord.tracking_number &&
-                              ord.tracking_number.toLowerCase().includes(orderSearchQuery.toLowerCase()));
-                          return matchesStatus && matchesSearch;
-                        }).length
-                      }
-                    </strong>{" "}
-                    of {ordersList.length} total orders
-                  </span>
+
+                {/* Payment Method Switcher Tabs */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex items-center bg-black p-0.5 border border-white/15 rounded text-[10px]">
+                    <span className="text-neutral-500 uppercase px-2 font-bold text-[9px]">Payment:</span>
+                    <button
+                      type="button"
+                      onClick={() => setOrderPaymentFilter("all")}
+                      className={`px-2.5 py-1 uppercase font-bold transition-all cursor-pointer rounded-xs ${
+                        orderPaymentFilter === "all"
+                          ? "bg-white text-black"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                    >
+                      All ({ordersList.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderPaymentFilter("online")}
+                      className={`px-2.5 py-1 uppercase font-bold transition-all cursor-pointer rounded-xs flex items-center gap-1 ${
+                        orderPaymentFilter === "online"
+                          ? "bg-cyan-500 text-black font-extrabold"
+                          : "text-cyan-400 hover:text-cyan-300"
+                      }`}
+                      title="Filter for Online Razorpay orders"
+                    >
+                      <CreditCard className="w-3 h-3" />
+                      <span>Online ({revMetrics.onlineOrdersCount})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderPaymentFilter("cod")}
+                      className={`px-2.5 py-1 uppercase font-bold transition-all cursor-pointer rounded-xs flex items-center gap-1 ${
+                        orderPaymentFilter === "cod"
+                          ? "bg-amber-500 text-black font-extrabold"
+                          : "text-amber-400 hover:text-amber-300"
+                      }`}
+                      title="Filter for Cash on Delivery (COD) orders"
+                    >
+                      <Truck className="w-3 h-3" />
+                      <span>COD ({ordersList.length - revMetrics.onlineOrdersCount})</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1955,7 +2146,7 @@ export default function AdminDashboard() {
                       <th className="p-4">Order ID & Date</th>
                       <th className="p-4">Customer Details & Tracking</th>
                       <th className="p-4">Ordered Products</th>
-                      <th className="p-4">Amount Due (COD)</th>
+                      <th className="p-4">Payment & Revenue</th>
                       <th className="p-4">Status Workflow</th>
                       <th className="p-4">Tracking Waybill</th>
                       <th className="p-4 text-right">Actions</th>
@@ -1965,6 +2156,11 @@ export default function AdminDashboard() {
                     {(() => {
                       const filtered = ordersList.filter((ord) => {
                         const matchesStatus = orderStatusFilter === "all" || ord.status === orderStatusFilter;
+                        const isOnline = isOnlineOrder(ord);
+                        const matchesPayment =
+                          orderPaymentFilter === "all" ||
+                          (orderPaymentFilter === "online" && isOnline) ||
+                          (orderPaymentFilter === "cod" && !isOnline);
                         const matchesSearch =
                           !orderSearchQuery ||
                           ord.order_number.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
@@ -1972,7 +2168,7 @@ export default function AdminDashboard() {
                           ord.customer_email.toLowerCase().includes(orderSearchQuery.toLowerCase()) ||
                           (ord.tracking_number &&
                             ord.tracking_number.toLowerCase().includes(orderSearchQuery.toLowerCase()));
-                        return matchesStatus && matchesSearch;
+                        return matchesStatus && matchesPayment && matchesSearch;
                       });
 
                       if (filtered.length === 0) {
@@ -1984,7 +2180,7 @@ export default function AdminDashboard() {
                               <p className="text-xs text-neutral-600 mt-1">
                                 {orderSearchQuery
                                   ? "No orders match your search criteria."
-                                  : `No orders currently have "${orderStatusFilter}" status.`}
+                                  : `No orders match status "${orderStatusFilter}" and payment filter "${orderPaymentFilter}".`}
                               </p>
                             </td>
                           </tr>
@@ -2069,10 +2265,33 @@ export default function AdminDashboard() {
                               )}
                             </td>
 
-                            {/* Amount Due (COD) */}
-                            <td className="p-4 font-bold text-white whitespace-nowrap">
-                              <div>{formatPrice(ord.total_amount)}</div>
-                              <span className="text-[9px] text-neutral-500 uppercase">COD</span>
+                            {/* Payment Method, Status & Amount */}
+                            <td className="p-4 whitespace-nowrap">
+                              <div className="font-bold text-white text-sm">
+                                {formatPrice(ord.total_amount)}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                {isOnlineOrder(ord) ? (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.5 bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 font-bold uppercase inline-flex items-center gap-1">
+                                    <CreditCard className="w-2.5 h-2.5" />
+                                    <span>Online</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.5 bg-amber-950/60 text-amber-300 border border-amber-500/30 font-bold uppercase inline-flex items-center gap-1">
+                                    <Truck className="w-2.5 h-2.5" />
+                                    <span>COD</span>
+                                  </span>
+                                )}
+                                <span
+                                  className={`text-[9px] font-mono px-1.5 py-0.5 font-bold uppercase rounded-xs border ${
+                                    ord.payment_status === "paid" || ord.status === "delivered"
+                                      ? "text-emerald-400 bg-emerald-950/50 border-emerald-500/30"
+                                      : "text-amber-400 bg-amber-950/50 border-amber-500/30"
+                                  }`}
+                                >
+                                  {ord.payment_status === "paid" || ord.status === "delivered" ? "Paid" : "Pending"}
+                                </span>
+                              </div>
                             </td>
 
                             {/* Status Workflow Selector */}
@@ -2257,8 +2476,21 @@ export default function AdminDashboard() {
                     {/* Order Status & Payment Meta */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-4 border-b border-white/10 bg-black/20 p-4">
                       <div>
-                        <span className="text-[10px] text-neutral-500 uppercase block">Payment Method</span>
-                        <span className="text-[#c5a46d] font-bold block">{selectedOrder.payment_method}</span>
+                        <span className="text-[10px] text-neutral-500 uppercase block">Payment Method & Status</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className={`font-bold block text-xs ${isOnlineOrder(selectedOrder) ? "text-cyan-400" : "text-amber-400"}`}>
+                            {selectedOrder.payment_method || (isOnlineOrder(selectedOrder) ? "Razorpay Online" : "Cash on Delivery")}
+                          </span>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.5 font-mono uppercase rounded-xs border font-bold ${
+                              selectedOrder.payment_status === "paid" || selectedOrder.status === "delivered"
+                                ? "bg-emerald-950/70 text-emerald-400 border-emerald-500/30"
+                                : "bg-amber-950/70 text-amber-400 border-amber-500/30"
+                            }`}
+                          >
+                            {selectedOrder.payment_status === "paid" || selectedOrder.status === "delivered" ? "Paid" : "Pending"}
+                          </span>
+                        </div>
                       </div>
                       <div>
                         <span className="text-[10px] text-neutral-500 uppercase block">Courier Tracking</span>
@@ -2890,7 +3122,7 @@ export default function AdminDashboard() {
             <div className="max-w-3xl space-y-6">
               <div>
                 <h2 className="text-2xl font-black uppercase tracking-tight font-display">
-                  Atelier Logistics & Payment Settings
+                  Store Logistics & Payment Settings
                 </h2>
                 <p className="text-xs font-mono text-neutral-400">
                   Pure Indian operations configuration (Cash on Delivery exclusively, Blue Dart shipping).
@@ -2955,7 +3187,7 @@ export default function AdminDashboard() {
 
                 <button
                   type="button"
-                  onClick={() => showNotification("success", "Atelier logistics configuration saved.")}
+                  onClick={() => showNotification("success", "Store logistics configuration saved.")}
                   className="px-6 py-3 bg-[#c5a46d] text-black font-extrabold text-xs uppercase tracking-widest cursor-pointer shadow-lg shadow-[#c5a46d]/15"
                 >
                   Save Settings

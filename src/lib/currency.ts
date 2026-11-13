@@ -1,5 +1,5 @@
 /**
- * Indian Rupee (INR) currency formatting and localization utilities for NOIR Atelier
+ * Indian Rupee (INR) currency formatting and localization utilities for NOIR Studio
  */
 
 export const CURRENCY_SYMBOL = "₹";

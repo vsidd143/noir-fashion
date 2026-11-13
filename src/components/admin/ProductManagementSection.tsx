@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef } from "react";
-import { DbProduct, createProductInDb, updateProductInDb, archiveProductInDb, deleteProductInDb, toggleProductPublishInDb } from "@/lib/products-service";
+import { DbProduct, createProductInDb, updateProductInDb, archiveProductInDb, deleteProductInDb, toggleProductPublishInDb, purgeAllArchivedProductsInDb } from "@/lib/products-service";
 import { uploadProductMedia, deleteProductMedia } from "@/lib/storage-service";
 import { formatPrice } from "@/lib/currency";
 import {
@@ -30,6 +30,8 @@ import {
   Tag,
   RefreshCw,
   SlidersHorizontal,
+  Palette,
+  Pipette,
 } from "lucide-react";
 
 export type ProductMgmtTab = "all-products" | "add-product" | "categories" | "inventory" | "recently-added";
@@ -88,6 +90,31 @@ const DEFAULT_PRODUCT_TYPES: { id: string; name: string; slug: string }[] = [
   { id: "pt-accessories", name: "Accessories", slug: "accessories" },
 ];
 
+export type AdminProductColor = {
+  id: string;
+  name: string;
+  hex: string;
+};
+
+const COLOR_PRESETS: { name: string; hex: string }[] = [
+  { name: "Classic White", hex: "#FFFFFF" },
+  { name: "Obsidian Black", hex: "#0A0A0A" },
+  { name: "Midnight Navy", hex: "#0F172A" },
+  { name: "Charcoal Slate", hex: "#334155" },
+  { name: "Forest Olive", hex: "#3F4A3C" },
+  { name: "Earthy Beige", hex: "#D4B996" },
+  { name: "Royal Blue", hex: "#1A3B8B" },
+  { name: "Crimson Noir", hex: "#881337" },
+  { name: "Smoke Gray", hex: "#94A3B8" },
+  { name: "Sage Mint", hex: "#84A98C" },
+];
+
+let globalColorCounter = 0;
+function generateColorId(prefix: string): string {
+  globalColorCounter += 1;
+  return `${prefix}-${globalColorCounter}`;
+}
+
 export default function ProductManagementSection({
   products,
   categories,
@@ -117,8 +144,125 @@ export default function ProductManagementSection({
   const [editingProduct, setEditingProduct] = useState<DbProduct | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<DbProduct | null>(null);
   const [isDeletingLoading, setIsDeletingLoading] = useState(false);
+  const [showPurgeModal, setShowPurgeModal] = useState(false);
+  const [isPurgingArchived, setIsPurgingArchived] = useState(false);
+
+  const startEditingProduct = (prod: DbProduct) => {
+    const existingCare =
+      prod.care ||
+      (Array.isArray(prod.details)
+        ? prod.details.find((d) => typeof d === "string" && d.toLowerCase().startsWith("care:"))?.replace(/^care:\s*/i, "")
+        : undefined) ||
+      "Machine wash cold";
+
+    // Extract existing colors from prod.variants
+    const existingColors: AdminProductColor[] = [];
+    if (prod.variants && prod.variants.length > 0) {
+      const seen = new Set<string>();
+      prod.variants.forEach((v, idx) => {
+        const key = `${v.color_name || ""}-${v.color_hex || ""}`.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          existingColors.push({
+            id: `edit-col-${idx + 1}`,
+            name: v.color_name || "Classic White",
+            hex: v.color_hex || "#FFFFFF",
+          });
+        }
+      });
+    }
+    if (existingColors.length === 0) {
+      existingColors.push({ id: "edit-col-1", name: "Classic White", hex: "#FFFFFF" });
+    }
+    setEditingProductColors(existingColors);
+
+    setEditingProduct({
+      ...prod,
+      material: prod.material || "480 GSM Loopback French Terry Cotton",
+      fit: prod.fit || "Oversized Boxy Fit",
+      care: existingCare,
+    });
+  };
 
   // Form State for Add Product
+  const [productColors, setProductColors] = useState<AdminProductColor[]>([
+    { id: "col-default", name: "Classic White", hex: "#FFFFFF" },
+  ]);
+  const [editingProductColors, setEditingProductColors] = useState<AdminProductColor[]>([]);
+
+  // Color management handlers for Add Product
+  const handleAddColor = () => {
+    const newId = generateColorId("col");
+    setProductColors((prev) => [
+      ...prev,
+      { id: newId, name: `Color ${prev.length + 1}`, hex: "#0A0A0A" },
+    ]);
+  };
+
+  const handleRemoveColor = (id: string) => {
+    if (productColors.length <= 1) {
+      showNotification("error", "At least one color option must remain for the product.");
+      return;
+    }
+    setProductColors((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const handleUpdateColor = (id: string, field: "name" | "hex", value: string) => {
+    setProductColors((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c))
+    );
+  };
+
+  const handleAddPresetColor = (preset: { name: string; hex: string }) => {
+    const alreadyExists = productColors.some(
+      (c) =>
+        c.hex.toLowerCase() === preset.hex.toLowerCase() ||
+        c.name.toLowerCase() === preset.name.toLowerCase()
+    );
+    if (alreadyExists) {
+      showNotification("error", `"${preset.name}" is already in your color options.`);
+      return;
+    }
+    const newId = generateColorId("col");
+    setProductColors((prev) => [...prev, { id: newId, name: preset.name, hex: preset.hex }]);
+  };
+
+  // Color management handlers for Edit Product
+  const handleAddEditColor = () => {
+    const newId = generateColorId("edit-col");
+    setEditingProductColors((prev) => [
+      ...prev,
+      { id: newId, name: `Color ${prev.length + 1}`, hex: "#0A0A0A" },
+    ]);
+  };
+
+  const handleRemoveEditColor = (id: string) => {
+    if (editingProductColors.length <= 1) {
+      showNotification("error", "At least one color option must remain.");
+      return;
+    }
+    setEditingProductColors((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const handleUpdateEditColor = (id: string, field: "name" | "hex", value: string) => {
+    setEditingProductColors((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c))
+    );
+  };
+
+  const handleAddEditPresetColor = (preset: { name: string; hex: string }) => {
+    const alreadyExists = editingProductColors.some(
+      (c) =>
+        c.hex.toLowerCase() === preset.hex.toLowerCase() ||
+        c.name.toLowerCase() === preset.name.toLowerCase()
+    );
+    if (alreadyExists) {
+      showNotification("error", `"${preset.name}" is already in your color options.`);
+      return;
+    }
+    const newId = generateColorId("edit-col");
+    setEditingProductColors((prev) => [...prev, { id: newId, name: preset.name, hex: preset.hex }]);
+  };
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [subtitle, setSubtitle] = useState("");
@@ -153,13 +297,14 @@ export default function ProductManagementSection({
     }
     return DEFAULT_PRODUCT_TYPES;
   }, [productTypes]);
-  const [brand, setBrand] = useState("NOIR Atelier");
+  const [brand, setBrand] = useState("NOIR Studio");
   const [sku, setSku] = useState("");
   const [regularPrice, setRegularPrice] = useState<number>(9999);
   const [salePrice, setSalePrice] = useState<number>(7999);
   const [costPrice, setCostPrice] = useState<number>(3200);
   const [material, setMaterial] = useState("480 GSM Loopback French Terry Cotton");
-  const [fit, setFit] = useState("Oversized Boxy Silhouette");
+  const [fit, setFit] = useState("Oversized Boxy Fit");
+  const [care, setCare] = useState("Machine wash cold");
   const [enabledSizes, setEnabledSizes] = useState<string[]>(["S", "M", "L", "XL"]);
   const [stockQuantity, setStockQuantity] = useState<number>(20);
   const [lowStockThreshold, setLowStockThreshold] = useState<number>(5);
@@ -184,7 +329,8 @@ export default function ProductManagementSection({
     const outOfStock = products.filter((p) => (p.stock_quantity ?? 0) === 0 && !p.is_archived).length;
     const lowStock = products.filter((p) => (p.stock_quantity ?? 0) > 0 && (p.stock_quantity ?? 0) <= 5 && !p.is_archived).length;
     const newArrivals = products.filter((p) => p.is_new_arrival && !p.is_archived).length;
-    return { total, active, draft, outOfStock, lowStock, newArrivals };
+    const archived = products.filter((p) => p.is_archived).length;
+    return { total, active, draft, outOfStock, lowStock, newArrivals, archived };
   }, [products]);
 
   // Filtered & Sorted Products
@@ -384,14 +530,28 @@ export default function ProductManagementSection({
           },
         ];
 
-    const perSizeStock = Math.max(1, Math.floor(stockQuantity / enabledSizes.length));
-    const variantList = enabledSizes.map((sz) => ({
-      color_name: "Obsidian Black",
-      color_hex: "#0a0a0a",
-      size: sz,
-      stock_quantity: perSizeStock,
-      sku: `${generatedSku}-BLK-${sz}`.toUpperCase(),
-    }));
+    const activeColors = productColors.filter((c) => c.name.trim().length > 0);
+    const finalColors =
+      activeColors.length > 0
+        ? activeColors
+        : [{ id: "1", name: "Classic White", hex: "#FFFFFF" }];
+
+    const totalVariants = Math.max(1, enabledSizes.length * finalColors.length);
+    const perVariantStock = Math.max(1, Math.floor(stockQuantity / totalVariants));
+
+    const variantList = enabledSizes.flatMap((sz) =>
+      finalColors.map((col) => {
+        const cleanColCode =
+          col.name.replace(/[^a-zA-Z0-9]/g, "").substring(0, 3).toUpperCase() || "CLR";
+        return {
+          color_name: col.name.trim(),
+          color_hex: col.hex.trim(),
+          size: sz,
+          stock_quantity: perVariantStock,
+          sku: `${generatedSku}-${cleanColCode}-${sz}`.toUpperCase(),
+        };
+      })
+    );
 
     const cleanTags = Array.from(
       new Set([
@@ -416,6 +576,7 @@ export default function ProductManagementSection({
       cost_price: costPrice || undefined,
       material: material.trim(),
       fit: fit.trim(),
+      care: care.trim(),
       sku: generatedSku,
       stock_quantity: stockQuantity,
       is_published: isPublished,
@@ -424,7 +585,12 @@ export default function ProductManagementSection({
       is_best_seller: isBestSeller,
       is_limited: isLimited,
       tags: cleanTags,
-      details: ["Hand finished in Mumbai Atelier", "Pre-shrunk architectural weave", "Articulated anatomical cut"],
+      details: [
+        "Hand finished in Mumbai Studio",
+        "Pre-shrunk architectural weave",
+        "Articulated anatomical cut",
+        `Care: ${care.trim()}`,
+      ],
       images: imagesToSave,
       variants: variantList,
     };
@@ -433,7 +599,7 @@ export default function ProductManagementSection({
     setIsSaving(false);
 
     if (res.data) {
-      showNotification("success", `Silhouette "${name}" successfully registered! Live on ${cleanDept.toUpperCase()} and ${isNewArrival ? "NEW ARRIVALS" : "storefront"}.`);
+      showNotification("success", `Product "${name}" successfully registered! Live on ${cleanDept.toUpperCase()} and ${isNewArrival ? "NEW ARRIVALS" : "storefront"}.`);
       // Reset form
       setName("");
       setSlug("");
@@ -443,7 +609,11 @@ export default function ProductManagementSection({
       setDepartment("");
       setSelectedCategoryId("");
       setSelectedProductTypeId("");
+      setMaterial("480 GSM Loopback French Terry Cotton");
+      setFit("Oversized Boxy Fit");
+      setCare("Machine wash cold");
       setImages([]);
+      setProductColors([{ id: "col-default", name: "Classic White", hex: "#FFFFFF" }]);
       await onRefresh();
       setActiveTab("all-products");
     } else {
@@ -501,6 +671,34 @@ export default function ProductManagementSection({
       return;
     }
 
+    const editCare =
+      editingProduct.care !== undefined
+        ? editingProduct.care
+        : (Array.isArray(editingProduct.details)
+            ? editingProduct.details.find((d) => typeof d === "string" && d.toLowerCase().startsWith("care:"))?.replace(/^care:\s*/i, "") || "Machine wash cold"
+            : "Machine wash cold");
+
+    const editSizes = editingProduct.variants && editingProduct.variants.length > 0
+      ? Array.from(new Set(editingProduct.variants.map((v) => v.size)))
+      : ["S", "M", "L", "XL"];
+    const activeEditColors = editingProductColors.filter((c) => c.name.trim().length > 0);
+    const finalEditColors = activeEditColors.length > 0 ? activeEditColors : [{ id: "1", name: "Classic White", hex: "#FFFFFF" }];
+    const totalStock = Number(editingProduct.stock_quantity ?? 10);
+    const perVarStock = Math.max(1, Math.floor(totalStock / Math.max(1, editSizes.length * finalEditColors.length)));
+
+    const updatedVariants = editSizes.flatMap((sz) =>
+      finalEditColors.map((col) => {
+        const cleanColCode = col.name.replace(/[^a-zA-Z0-9]/g, "").substring(0, 3).toUpperCase() || "CLR";
+        return {
+          color_name: col.name.trim(),
+          color_hex: col.hex.trim(),
+          size: sz,
+          stock_quantity: perVarStock,
+          sku: `${editingProduct.sku || "NOIR"}-${cleanColCode}-${sz}`.toUpperCase(),
+        };
+      })
+    );
+
     setIsSaving(true);
     const res = await updateProductInDb(editingProduct.id, {
       name: editingProduct.name,
@@ -517,19 +715,41 @@ export default function ProductManagementSection({
       is_featured: editingProduct.is_featured,
       is_best_seller: editingProduct.is_best_seller,
       is_limited: editingProduct.is_limited,
-      material: editingProduct.material,
-      fit: editingProduct.fit,
+      material: editingProduct.material || "Quality Fabric",
+      fit: editingProduct.fit || "Standard Fit",
+      care: editCare || undefined,
       category_id: editingProduct.category_id || null,
       product_type_id: editingProduct.product_type_id || null,
+      variants: updatedVariants,
     });
 
     setIsSaving(false);
     if (res.success) {
-      showNotification("success", `Silhouette "${editingProduct.name}" updated successfully (Department: ${cleanDept.toUpperCase()}).`);
+      showNotification("success", `Product "${editingProduct.name}" updated successfully (Department: ${cleanDept.toUpperCase()}).`);
       setEditingProduct(null);
       await onRefresh();
     } else {
       showNotification("error", res.error || "Failed to update product in database.");
+    }
+  };
+
+  // Purge All Archived Products
+  const handlePurgeAllArchived = async () => {
+    setIsPurgingArchived(true);
+    try {
+      const res = await purgeAllArchivedProductsInDb();
+      setIsPurgingArchived(false);
+      setShowPurgeModal(false);
+      if (res.success) {
+        showNotification("success", `Successfully purged ${res.count} archived product(s) permanently.`);
+        await onRefresh();
+      } else {
+        showNotification("error", res.error || "Failed to purge archived products.");
+      }
+    } catch {
+      setIsPurgingArchived(false);
+      setShowPurgeModal(false);
+      showNotification("error", "Error purging archived products.");
     }
   };
 
@@ -539,8 +759,8 @@ export default function ProductManagementSection({
     setIsDeletingLoading(true);
 
     try {
-      // Calls server API or safe deletion workflow
-      const res = await fetch(`/api/admin/products/${deletingProduct.id}`, {
+      // Calls server API with force=true to ensure complete deletion
+      const res = await fetch(`/api/admin/products/${deletingProduct.id}?force=true`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
       });
@@ -550,13 +770,13 @@ export default function ProductManagementSection({
       setDeletingProduct(null);
 
       if (res.ok && data.success) {
-        showNotification("success", data.message || "Product silhouette removed.");
+        showNotification("success", data.message || "Product permanently removed.");
         await onRefresh();
       } else {
-        // Fallback to client service archive
-        const fallbackSuccess = await archiveProductInDb(deletingProduct.id);
+        // Fallback to client service direct deletion
+        const fallbackSuccess = await deleteProductInDb(deletingProduct.id);
         if (fallbackSuccess) {
-          showNotification("success", `Silhouette "${deletingProduct.name}" safely archived.`);
+          showNotification("success", `Product "${deletingProduct.name}" removed.`);
           await onRefresh();
         } else {
           showNotification("error", data.error || "Failed to delete product.");
@@ -564,8 +784,8 @@ export default function ProductManagementSection({
       }
     } catch {
       setIsDeletingLoading(false);
-      await archiveProductInDb(deletingProduct.id);
-      showNotification("success", `Silhouette "${deletingProduct.name}" safely archived.`);
+      await deleteProductInDb(deletingProduct.id);
+      showNotification("success", `Product "${deletingProduct.name}" removed.`);
       setDeletingProduct(null);
       await onRefresh();
     }
@@ -578,7 +798,7 @@ export default function ProductManagementSection({
         <div>
           <div className="flex items-center gap-2 text-xs font-mono text-[#c5a46d] uppercase tracking-widest mb-1">
             <Package className="w-3.5 h-3.5" />
-            <span>ATELIER COMMERCE COMMAND // PRODUCT MANAGEMENT</span>
+            <span>STUDIO COMMERCE COMMAND // PRODUCT MANAGEMENT</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight font-display text-white">
             Product Administration
@@ -774,8 +994,19 @@ export default function ProductManagementSection({
                 ))}
               </div>
 
-              <div className="text-neutral-500 text-[11px]">
-                Showing {filteredProducts.length} of {products.length} product
+              <div className="flex items-center gap-3">
+                {metrics.archived > 0 && (
+                  <button
+                    onClick={() => setShowPurgeModal(true)}
+                    className="px-3 py-1 bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-200 text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3 text-red-400" />
+                    <span>Purge All Archived ({metrics.archived})</span>
+                  </button>
+                )}
+                <div className="text-neutral-500 text-[11px]">
+                  Showing {filteredProducts.length} of {products.length} product
+                </div>
               </div>
             </div>
           </div>
@@ -785,7 +1016,7 @@ export default function ProductManagementSection({
             <table className="w-full text-left text-xs font-mono">
               <thead>
                 <tr className="border-b border-white/10 text-[10px] text-neutral-400 uppercase tracking-widest bg-black/70">
-                  <th className="p-4">Piece / Silhouette</th>
+                  <th className="p-4">Piece / Product</th>
                   <th className="p-4">Department</th>
                   <th className="p-4">Price (INR ₹)</th>
                   <th className="p-4">Stock</th>
@@ -908,8 +1139,8 @@ export default function ProductManagementSection({
                         {/* 7. Edit & Delete Actions */}
                         <td className="p-4 text-right space-x-2">
                           <button
-                            onClick={() => setEditingProduct(prod)}
-                            title="Edit silhouette specifications"
+                            onClick={() => startEditingProduct(prod)}
+                            title="Edit product specifications"
                             className="p-2 border border-white/10 hover:border-[#c5a46d] hover:text-[#c5a46d] transition-colors"
                           >
                             <Edit className="w-3.5 h-3.5" />
@@ -1055,7 +1286,7 @@ export default function ProductManagementSection({
           {/* Section 2: Core Specifications */}
           <div className="p-6 bg-[#0a0a0a] border border-white/10 space-y-6">
             <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300">
-              Silhouette Information
+              Product Information
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1112,7 +1343,7 @@ export default function ProductManagementSection({
                 <label className="block text-[10px] text-neutral-400 uppercase mb-1">Short Description / Subtitle</label>
                 <input
                   type="text"
-                  placeholder="e.g. 480 GSM Loopback French Terry Cotton Silhouette"
+                  placeholder="e.g. 480 GSM Loopback French Terry Cotton"
                   value={subtitle}
                   onChange={(e) => setSubtitle(e.target.value)}
                   className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
@@ -1123,11 +1354,69 @@ export default function ProductManagementSection({
                 <label className="block text-[10px] text-neutral-400 uppercase mb-1">Full Editorial Description</label>
                 <textarea
                   rows={3}
-                  placeholder="Complete fabric weight breakdown, drape specifications, and atelier finishing notes..."
+                  placeholder="Complete fabric weight breakdown, drape specifications, and crafting notes..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2.5: Product Specifications (Material, Fit, Care) */}
+          <div className="p-6 bg-[#0a0a0a] border border-white/10 space-y-6">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                  Product Specifications
+                </h3>
+                <p className="text-[10px] text-neutral-500 font-mono mt-0.5">
+                  Displayed on the product detail page under &quot;Product Specifications&quot; (Material, Fit, Care).
+                </p>
+              </div>
+              <span className="text-[10px] text-[#c5a46d] font-mono uppercase tracking-wider font-semibold">
+                Storefront Specs
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[10px] text-neutral-400 uppercase mb-1">Material *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 480 GSM Loopback French Terry Cotton"
+                  value={material}
+                  onChange={(e) => setMaterial(e.target.value)}
+                  className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
+                />
+                <span className="text-[9px] text-neutral-500 mt-1 block">Fabric composition & weave weight</span>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-neutral-400 uppercase mb-1">Fit *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Oversized Boxy Fit"
+                  value={fit}
+                  onChange={(e) => setFit(e.target.value)}
+                  className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
+                />
+                <span className="text-[9px] text-neutral-500 mt-1 block">Cut profile & fit shape</span>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-neutral-400 uppercase mb-1">Care Instructions *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Machine wash cold"
+                  value={care}
+                  onChange={(e) => setCare(e.target.value)}
+                  className="w-full bg-black border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-[#c5a46d]"
+                />
+                <span className="text-[9px] text-neutral-500 mt-1 block">Maintenance & washing guidelines</span>
               </div>
             </div>
           </div>
@@ -1216,7 +1505,7 @@ export default function ProductManagementSection({
                   ))}
                 </select>
                 <span className="text-[10px] text-neutral-500 font-mono mt-1 block">
-                  Garment silhouette classification (Apparel, Footwear, etc.).
+                  Garment classification (Apparel, Footwear, etc.).
                 </span>
               </div>
 
@@ -1238,6 +1527,141 @@ export default function ProductManagementSection({
                     </span>
                   </div>
                 </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Color Options & Swatches */}
+          <div className="p-6 bg-[#0a0a0a] border border-white/10 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-[#c5a46d]" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    Product Colors & Swatches ({productColors.length})
+                  </h3>
+                </div>
+                <p className="text-[10px] text-neutral-500 font-mono mt-0.5">
+                  Define the available colorways for this product. Swatches will display on the storefront detail page.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddColor}
+                className="self-start sm:self-auto px-3.5 py-1.5 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-[11px] uppercase font-mono tracking-wider rounded flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Color</span>
+              </button>
+            </div>
+
+            {/* Active Colors Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {productColors.map((col) => (
+                <div
+                  key={col.id}
+                  className="p-3.5 bg-black border border-white/15 hover:border-white/30 rounded-lg flex items-center gap-3 transition-colors"
+                >
+                  {/* Interactive Native Color Picker Swatch */}
+                  <div className="relative group shrink-0" title="Click to pick custom color">
+                    <input
+                      type="color"
+                      value={col.hex.startsWith("#") ? col.hex : `#${col.hex}`}
+                      onChange={(e) => handleUpdateColor(col.id, "hex", e.target.value)}
+                      className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
+                    />
+                    <div
+                      className="w-10 h-10 rounded-full border-2 border-white/20 group-hover:border-[#c5a46d] shadow-sm flex items-center justify-center transition-all cursor-pointer overflow-hidden"
+                      style={{ backgroundColor: col.hex }}
+                    >
+                      <Pipette className="w-3.5 h-3.5 text-white/70 drop-shadow mix-blend-difference group-hover:scale-110 transition-transform" />
+                    </div>
+                  </div>
+
+                  {/* Color Name & Hex Inputs */}
+                  <div className="flex-1 grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[9px] text-neutral-500 uppercase font-mono mb-0.5">
+                        Color Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Classic White"
+                        value={col.name}
+                        onChange={(e) => handleUpdateColor(col.id, "name", e.target.value)}
+                        className="w-full bg-[#141414] border border-white/10 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#c5a46d] font-mono rounded"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] text-neutral-500 uppercase font-mono mb-0.5">
+                        Hex Code *
+                      </label>
+                      <div className="flex items-center">
+                        <input
+                          type="text"
+                          required
+                          maxLength={7}
+                          placeholder="#FFFFFF"
+                          value={col.hex}
+                          onChange={(e) => {
+                            let val = e.target.value;
+                            if (!val.startsWith("#") && val.length > 0) val = `#${val}`;
+                            handleUpdateColor(col.id, "hex", val);
+                          }}
+                          className="w-full bg-[#141414] border border-white/10 px-2.5 py-1.5 text-xs text-white uppercase focus:outline-none focus:border-[#c5a46d] font-mono rounded"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Remove Button */}
+                  {productColors.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveColor(col.id)}
+                      className="p-2 text-neutral-500 hover:text-red-400 hover:bg-red-950/30 rounded border border-transparent hover:border-red-500/30 transition-all shrink-0 cursor-pointer"
+                      title="Remove this color"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Quick Luxury Presets Bar */}
+            <div className="pt-2 border-t border-white/5">
+              <span className="text-[10px] text-neutral-400 uppercase font-mono tracking-wider block mb-2">
+                Quick Palette Presets (Click to add)
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {COLOR_PRESETS.map((preset) => {
+                  const isAdded = productColors.some(
+                    (c) => c.hex.toLowerCase() === preset.hex.toLowerCase()
+                  );
+                  return (
+                    <button
+                      type="button"
+                      key={preset.name}
+                      onClick={() => handleAddPresetColor(preset)}
+                      className={`px-2.5 py-1 text-[11px] font-mono border rounded-full flex items-center gap-1.5 transition-all cursor-pointer ${
+                        isAdded
+                          ? "bg-white/10 text-neutral-300 border-[#c5a46d]/40 opacity-70"
+                          : "bg-black/60 text-neutral-400 border-white/15 hover:border-white/40 hover:text-white"
+                      }`}
+                    >
+                      <span
+                        className="w-2.5 h-2.5 rounded-full border border-white/30"
+                        style={{ backgroundColor: preset.hex }}
+                      />
+                      <span>{preset.name}</span>
+                      {isAdded && <Check className="w-3 h-3 text-[#c5a46d]" />}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1503,7 +1927,7 @@ export default function ProductManagementSection({
             <table className="w-full text-left text-xs font-mono">
               <thead>
                 <tr className="border-b border-white/10 text-[10px] text-neutral-400 uppercase tracking-widest bg-black/70">
-                  <th className="p-4">Silhouette</th>
+                  <th className="p-4">Product</th>
                   <th className="p-4">SKU</th>
                   <th className="p-4">Department</th>
                   <th className="p-4">Selling Price</th>
@@ -1534,7 +1958,7 @@ export default function ProductManagementSection({
                       </td>
                       <td className="p-4 text-right">
                         <button
-                          onClick={() => setEditingProduct(prod)}
+                          onClick={() => startEditingProduct(prod)}
                           className="px-3 py-1 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-bold uppercase text-[10px]"
                         >
                           Adjust Units
@@ -1581,7 +2005,7 @@ export default function ProductManagementSection({
                 </div>
                 <div className="pt-2 border-t border-white/5 flex gap-2">
                   <button
-                    onClick={() => setEditingProduct(prod)}
+                    onClick={() => startEditingProduct(prod)}
                     className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-white font-mono text-[10px] uppercase text-center"
                   >
                     Edit
@@ -1602,7 +2026,7 @@ export default function ProductManagementSection({
             <div className="flex justify-between items-center border-b border-white/10 pb-4">
               <div>
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[#c5a46d] block">
-                  SILHOUETTE SPECIFICATIONS
+                  PRODUCT SPECIFICATIONS
                 </span>
                 <h3 className="text-xl font-bold uppercase font-display text-white">
                   Edit &ldquo;{editingProduct.name}&rdquo;
@@ -1760,6 +2184,156 @@ export default function ProductManagementSection({
                 />
               </div>
 
+              {/* Product Specifications in Edit Modal */}
+              <div className="p-3 bg-white/[0.02] border border-white/10 space-y-3">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <label className="block text-[10px] text-neutral-300 uppercase font-mono font-bold">
+                    Product Specifications
+                  </label>
+                  <span className="text-[9px] text-[#c5a46d] font-mono uppercase">
+                    Storefront Specs Box
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-neutral-400 uppercase mb-1">Material</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 480 GSM Loopback French Terry Cotton"
+                      value={editingProduct.material || ""}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, material: e.target.value })}
+                      className="w-full bg-black border border-white/20 px-3 py-2 text-white text-xs focus:outline-none focus:border-[#c5a46d]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-neutral-400 uppercase mb-1">Fit</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Oversized Boxy Fit"
+                      value={editingProduct.fit || ""}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, fit: e.target.value })}
+                      className="w-full bg-black border border-white/20 px-3 py-2 text-white text-xs focus:outline-none focus:border-[#c5a46d]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-neutral-400 uppercase mb-1">Care Instructions</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Machine wash cold"
+                      value={editingProduct.care || ""}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, care: e.target.value })}
+                      className="w-full bg-black border border-white/20 px-3 py-2 text-white text-xs focus:outline-none focus:border-[#c5a46d]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Color Options & Swatches for Edit Modal */}
+              <div className="p-3 bg-white/[0.02] border border-white/10 space-y-3">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-[#c5a46d]" />
+                    <span className="text-[10px] text-neutral-300 uppercase font-mono font-bold">
+                      Color Options & Swatches ({editingProductColors.length})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddEditColor}
+                    className="px-2.5 py-1 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-[10px] uppercase font-mono tracking-wider rounded flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Color</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                  {editingProductColors.map((col) => (
+                    <div
+                      key={col.id}
+                      className="p-2.5 bg-black border border-white/15 rounded-lg flex items-center gap-2.5"
+                    >
+                      <div className="relative group shrink-0" title="Click to pick color">
+                        <input
+                          type="color"
+                          value={col.hex.startsWith("#") ? col.hex : `#${col.hex}`}
+                          onChange={(e) => handleUpdateEditColor(col.id, "hex", e.target.value)}
+                          className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
+                        />
+                        <div
+                          className="w-8 h-8 rounded-full border border-white/30 flex items-center justify-center cursor-pointer overflow-hidden"
+                          style={{ backgroundColor: col.hex }}
+                        >
+                          <Pipette className="w-3 h-3 text-white/70 drop-shadow mix-blend-difference" />
+                        </div>
+                      </div>
+
+                      <div className="flex-1 grid grid-cols-2 gap-1.5">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Color Name"
+                          value={col.name}
+                          onChange={(e) => handleUpdateEditColor(col.id, "name", e.target.value)}
+                          className="w-full bg-[#141414] border border-white/10 px-2 py-1 text-[11px] text-white focus:outline-none focus:border-[#c5a46d] rounded"
+                        />
+                        <input
+                          type="text"
+                          required
+                          maxLength={7}
+                          placeholder="#FFFFFF"
+                          value={col.hex}
+                          onChange={(e) => {
+                            let val = e.target.value;
+                            if (!val.startsWith("#") && val.length > 0) val = `#${val}`;
+                            handleUpdateEditColor(col.id, "hex", val);
+                          }}
+                          className="w-full bg-[#141414] border border-white/10 px-2 py-1 text-[11px] text-white uppercase focus:outline-none focus:border-[#c5a46d] font-mono rounded"
+                        />
+                      </div>
+
+                      {editingProductColors.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveEditColor(col.id)}
+                          className="p-1 text-neutral-500 hover:text-red-400 cursor-pointer shrink-0"
+                          title="Remove color"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick Presets for Edit Modal */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {COLOR_PRESETS.map((preset) => {
+                    const isAdded = editingProductColors.some(
+                      (c) => c.hex.toLowerCase() === preset.hex.toLowerCase()
+                    );
+                    return (
+                      <button
+                        type="button"
+                        key={preset.name}
+                        onClick={() => handleAddEditPresetColor(preset)}
+                        className={`px-2 py-0.5 text-[10px] font-mono border rounded-full flex items-center gap-1 cursor-pointer ${
+                          isAdded
+                            ? "bg-white/10 text-neutral-300 border-[#c5a46d]/40 opacity-70"
+                            : "bg-black text-neutral-400 border-white/15 hover:border-white/30 hover:text-white"
+                        }`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full border border-white/30"
+                          style={{ backgroundColor: preset.hex }}
+                        />
+                        <span>{preset.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Badges Toggles */}
               <div className="flex flex-wrap gap-4 pt-2 border-t border-white/10">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -1814,7 +2388,7 @@ export default function ProductManagementSection({
             <div className="flex items-center gap-3 text-red-400">
               <AlertTriangle className="w-6 h-6 shrink-0" />
               <h3 className="text-base font-bold uppercase font-display text-white">
-                Delete Product Silhouette?
+                Delete Product?
               </h3>
             </div>
 
@@ -1848,6 +2422,46 @@ export default function ProductManagementSection({
               >
                 {isDeletingLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                 <span>Confirm Removal</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================== */}
+      {/* MODAL: PURGE ALL ARCHIVED PRODUCTS CONFIRMATION */}
+      {/* ===================================================== */}
+      {showPurgeModal && (
+        <div className="fixed inset-0 z-[270] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-[#0a0a0a] border border-red-500/40 p-6 max-w-md w-full space-y-4">
+            <div className="flex items-center gap-3 text-red-400">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3 className="text-base font-bold uppercase font-display text-white">
+                Purge All Archived Products?
+              </h3>
+            </div>
+
+            <p className="text-xs font-mono text-neutral-300 leading-relaxed">
+              This will permanently delete all <strong>{metrics.archived} archived/demo product(s)</strong>, their images, and variants from your database. This action is irreversible.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+              <button
+                type="button"
+                disabled={isPurgingArchived}
+                onClick={() => setShowPurgeModal(false)}
+                className="px-4 py-2 border border-white/20 text-neutral-400 hover:text-white text-xs font-mono"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handlePurgeAllArchived}
+                disabled={isPurgingArchived}
+                className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+              >
+                {isPurgingArchived ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Permanently Purge All</span>
               </button>
             </div>
           </div>

@@ -126,7 +126,7 @@ export default function ScrollStorytelling() {
                   <div className="pt-4 border-t border-white/10 flex items-center gap-6 text-[11px] font-mono text-neutral-500 uppercase">
                     <span>ARCHIVE RUNWAY</span>
                     <span>•</span>
-                    <span className="text-[#c5a46d]">NOIR ATELIER</span>
+                    <span className="text-[#c5a46d]">NOIR STUDIO</span>
                   </div>
                 </div>
               </div>

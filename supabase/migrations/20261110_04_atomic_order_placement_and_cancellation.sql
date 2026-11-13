@@ -92,7 +92,7 @@ BEGIN
     FOR UPDATE;
 
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'Garment silhouette with ID % not found in catalog.', v_prod_id;
+      RAISE EXCEPTION 'Garment product with ID % not found in catalog.', v_prod_id;
     END IF;
 
     IF NOT v_product.is_published OR v_product.is_archived THEN

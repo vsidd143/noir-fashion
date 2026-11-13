@@ -1,5 +1,5 @@
 /**
- * NOIR Luxury Atelier - Operating Expenses Management Service
+ * NOIR Luxury Studio - Operating Expenses Management Service
  * Full Supabase database integration with local storage fallback
  */
 

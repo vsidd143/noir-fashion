@@ -1,5 +1,5 @@
 /**
- * NOIR Luxury Atelier - Enterprise Sales Analytics & Profit Engine
+ * NOIR Luxury Studio - Enterprise Sales Analytics & Profit Engine
  * Comprehensive calculations for metrics, profit margins, COGS,
  * customer cohort segmentation, and date-range comparisons in Asia/Kolkata.
  */
@@ -337,11 +337,43 @@ export function calculateProfitBreakdown(
   startDate?: Date,
   endDate?: Date
 ): ProfitBreakdown {
-  const deliveredOrders = ordersInPeriod.filter((o) => o.status === "delivered");
+  // Classify realized orders:
+  // 1. Online Paid Orders (Razorpay: UPI, Card, Scanner, Netbanking)
+  // 2. Offline Delivered COD Orders
+  const isOnline = (o: AnalyticsOrder) => {
+    const pm = (o.payment_method || "").toLowerCase();
+    const ps = (o.payment_status || "").toLowerCase();
+    return (
+      pm.includes("razorpay") ||
+      pm.includes("online") ||
+      pm.includes("card") ||
+      pm.includes("upi") ||
+      pm.includes("scanner") ||
+      pm.includes("netbanking") ||
+      (ps === "paid" && !pm.includes("cash") && !pm.includes("cod"))
+    );
+  };
 
-  // Gross Sales Revenue (Delivered only)
-  const grossSalesRevenue = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-  const discountsTotal = deliveredOrders.reduce((sum, o) => sum + Number(o.discount_amount || 0), 0);
+  const onlineOrders = ordersInPeriod.filter(
+    (o) =>
+      o.status !== "cancelled" &&
+      isOnline(o) &&
+      (o.payment_status === "paid" || ["confirmed", "processing", "shipped", "delivered"].includes(o.status))
+  );
+
+  const offlineOrders = ordersInPeriod.filter(
+    (o) =>
+      o.status !== "cancelled" &&
+      !isOnline(o) &&
+      (o.status === "delivered" || o.payment_status === "paid")
+  );
+
+  const realizedOrders = Array.from(new Set([...onlineOrders, ...offlineOrders]));
+
+  const onlineSalesRevenue = onlineOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+  const offlineSalesRevenue = offlineOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+  const grossSalesRevenue = onlineSalesRevenue + offlineSalesRevenue;
+  const discountsTotal = realizedOrders.reduce((sum, o) => sum + Number(o.discount_amount || 0), 0);
 
   // Net sales
   const netSales = grossSalesRevenue;
@@ -363,7 +395,7 @@ export function calculateProfitBreakdown(
   let cogsKnownCount = 0;
   let cogsMissingCount = 0;
 
-  deliveredOrders.forEach((o) => {
+  realizedOrders.forEach((o) => {
     if (o.items && o.items.length > 0) {
       o.items.forEach((item) => {
         const qty = item.quantity || 1;
@@ -434,6 +466,8 @@ export function calculateProfitBreakdown(
 
   return {
     grossSalesRevenue,
+    onlineSalesRevenue,
+    offlineSalesRevenue,
     discountsTotal,
     netSales,
     cogsTotal,
@@ -881,7 +915,7 @@ export function generateBusinessAlerts(
       id: "low-margin",
       type: "warning",
       title: "Profit Margin Compressed",
-      description: `Net profit margin is currently ${profit.profitMarginPercent}%, below the atelier target of 25%. Operating expenses and fulfillment overhead should be optimized.`,
+      description: `Net profit margin is currently ${profit.profitMarginPercent}%, below the target of 25%. Operating expenses and fulfillment overhead should be optimized.`,
       metric: `${profit.profitMarginPercent}% Margin`,
       actionText: "Review Expenses",
     });

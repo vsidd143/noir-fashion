@@ -1,5 +1,5 @@
 /**
- * NOIR Luxury Atelier - Sales Analytics & Business Intelligence Types
+ * NOIR Luxury Studio - Sales Analytics & Business Intelligence Types
  */
 
 export type ReportingPeriod = "weekly" | "monthly" | "yearly" | "custom";
@@ -76,7 +76,9 @@ export interface SalesAnalyticsMetrics {
 }
 
 export interface ProfitBreakdown {
-  grossSalesRevenue: number; // delivered order values
+  grossSalesRevenue: number; // total combined realized revenue
+  onlineSalesRevenue: number; // Razorpay online gateway revenue
+  offlineSalesRevenue: number; // Cash on delivery realized revenue
   discountsTotal: number;
   netSales: number; // grossSales - discounts (if not already factored)
   cogsTotal: number; // total product cost

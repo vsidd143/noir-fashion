@@ -10,7 +10,7 @@ export function generateStaticParams() {
     }));
   }
 
-  return [{ slug: "noir-silhouette" }];
+  return [{ slug: "noir-product" }];
 }
 
 interface ProductPageProps {
@@ -34,7 +34,7 @@ export default function ProductPage({
     <Suspense
       fallback={
         <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center font-mono text-xs tracking-widest uppercase">
-          Loading Atelier Piece...
+          Loading Product...
         </div>
       }
     >

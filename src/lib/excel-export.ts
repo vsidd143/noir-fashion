@@ -1,5 +1,5 @@
 /**
- * NOIR Atelier - Multi-Sheet Excel Spreadsheet Generator
+ * NOIR Studio - Multi-Sheet Excel Spreadsheet Generator
  * Generates native Microsoft Office XML Spreadsheets (.xls) with multi-tab support
  * Compatible with Microsoft Excel, Apple Numbers, Google Sheets, and LibreOffice.
  */
@@ -159,9 +159,9 @@ export function exportOrdersToExcel(orders: ExportOrderItem[], filenamePrefix = 
   xmlns:html="http://www.w3.org/TR/REC-html40">
   <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
     <Title>NOIR Order Management Report</Title>
-    <Author>NOIR Atelier Admin</Author>
+    <Author>NOIR Studio Admin</Author>
     <Created>${new Date().toISOString()}</Created>
-    <Company>NOIR Luxury Atelier</Company>
+    <Company>NOIR Studio</Company>
   </DocumentProperties>
   <Styles>
     <Style ss:ID="Default" ss:Name="Normal">

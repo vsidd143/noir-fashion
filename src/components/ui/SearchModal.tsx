@@ -1,12 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import Link from "next/link";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X, ArrowRight, Loader2, Tag, Sparkles } from "lucide-react";
+import { Search, X, ArrowUpLeft, CornerDownLeft } from "lucide-react";
 import { Product } from "@/types/fashion";
 import { getLiveProducts } from "@/lib/products-service";
-import { formatPrice } from "@/lib/currency";
 import { usePageTransition } from "@/context/PageTransitionContext";
 
 interface SearchModalProps {
@@ -14,20 +12,44 @@ interface SearchModalProps {
   onClose: () => void;
 }
 
-const QUICK_CATEGORIES = [
-  { label: "Men's Collection", href: "/men" },
-  { label: "Women's Collection", href: "/women" },
-  { label: "Kids Collection", href: "/kids" },
-  { label: "New Arrivals", href: "/new-arrivals" },
-  { label: "Heavy Hoodies", query: "hoodie" },
-  { label: "Technical Jackets", query: "jacket" },
-  { label: "Cargo Trousers", query: "cargo" },
-];
+interface SuggestionEntry {
+  id: string;
+  text: string;
+  href: string;
+  isDirectProduct?: boolean;
+}
+
+/**
+ * Formats suggestion text to match the autocomplete design:
+ * The typed query characters are regular/lighter font weight,
+ * and the suggested/completed extensions are bold.
+ */
+function SuggestionText({ text, query }: { text: string; query: string }) {
+  const q = query.trim().toLowerCase();
+  const lower = text.toLowerCase();
+
+  const idx = lower.indexOf(q);
+  if (idx === -1) {
+    return <span className="font-bold text-white">{text}</span>;
+  }
+
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + q.length);
+  const after = text.slice(idx + q.length);
+
+  return (
+    <span className="text-[14px] sm:text-[15px] font-mono tracking-wide leading-none select-none">
+      {before && <span className="font-bold text-white">{before}</span>}
+      <span className="font-normal text-neutral-400">{match}</span>
+      {after && <span className="font-bold text-white">{after}</span>}
+    </span>
+  );
+}
 
 export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const { navigateTo } = usePageTransition();
 
@@ -36,27 +58,23 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     setPrevIsOpen(isOpen);
     if (!isOpen) {
       setQuery("");
+      setSelectedIndex(-1);
     }
   }
 
-  // Fetch products and focus input on open
+  // Fetch real database products only
   useEffect(() => {
     if (isOpen) {
       let active = true;
       getLiveProducts()
         .then((live) => {
-          if (active) {
-            setProducts(live);
-            setIsLoading(false);
-          }
+          if (active && live.length > 0) setProducts(live);
         })
-        .catch(() => {
-          if (active) setIsLoading(false);
-        });
+        .catch(() => {});
 
       const timer = setTimeout(() => {
         inputRef.current?.focus();
-      }, 50);
+      }, 60);
       return () => {
         active = false;
         clearTimeout(timer);
@@ -64,232 +82,337 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     }
   }, [isOpen]);
 
-  // Handle ESC key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
+  const handleQueryChange = (val: string) => {
+    setQuery(val);
+    setSelectedIndex(-1);
+  };
+
+  // Generate intelligent autocomplete search suggestions tailored strictly to real store inventory
+  const suggestions = useMemo<SuggestionEntry[]>(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+
+    const candidates: SuggestionEntry[] = [];
+    const seen = new Set<string>();
+
+    const addCandidate = (text: string, href: string, isDirectProduct = false) => {
+      const clean = text.trim();
+      if (!clean) return;
+      const lower = clean.toLowerCase();
+      if (seen.has(lower)) return;
+      seen.add(lower);
+      candidates.push({
+        id: `sug-${lower.replace(/\s+/g, "-")}`,
+        text: clean,
+        href,
+        isDirectProduct,
+      });
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
 
-  // Filter products by query
-  const filteredProducts = React.useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return [];
+    // 1. Department & category queries
+    const departments = [
+      { name: "men's collection", href: "/men", keywords: ["men", "mens", "men's", "male"] },
+      { name: "women's collection", href: "/women", keywords: ["women", "womens", "women's", "female"] },
+      { name: "kids collection", href: "/kids", keywords: ["kid", "kids", "baby", "children"] },
+      { name: "new arrivals", href: "/new-arrivals", keywords: ["new", "arrival", "arrivals", "drop", "latest"] },
+    ];
 
-    return products.filter((p) => {
-      const nameMatch = p.name.toLowerCase().includes(trimmed);
-      const subMatch = (p.subtitle || "").toLowerCase().includes(trimmed);
-      const catMatch = (p.category || "").toLowerCase().includes(trimmed);
-      const descMatch = (p.description || "").toLowerCase().includes(trimmed);
-      const tagMatch = p.tags?.some((t) => t.toLowerCase().includes(trimmed)) || false;
-      const matMatch = (p.material || "").toLowerCase().includes(trimmed);
-      return nameMatch || subMatch || catMatch || descMatch || tagMatch || matMatch;
-    });
+    for (const d of departments) {
+      if (d.name.includes(q) || d.keywords.some((k) => k.startsWith(q) || q.startsWith(k))) {
+        addCandidate(d.name, d.href);
+      }
+    }
+
+    // 2. Real products from database & natural search completions
+    for (const p of products) {
+      const pName = p.name.toLowerCase();
+      const pDept = (p.department || "").toLowerCase();
+      const pCat = (p.category || "").toLowerCase();
+
+      // Direct exact product match
+      if (pName.includes(q)) {
+        addCandidate(p.name, `/product/${p.id}`, true);
+      }
+
+      // Department-augmented completions (e.g. "hoodies for men", "peplum tops for women")
+      if (pDept) {
+        const withDept = `${pName} for ${pDept}`;
+        if (withDept.includes(q)) {
+          addCandidate(withDept, `/${pDept}?search=${encodeURIComponent(p.name)}`);
+        }
+      }
+
+      // Category matches
+      if (pCat && pCat !== pName && pCat.includes(q)) {
+        addCandidate(pCat, `/new-arrivals?search=${encodeURIComponent(pCat)}`);
+        if (pDept) {
+          addCandidate(`${pCat} for ${pDept}`, `/${pDept}?search=${encodeURIComponent(pCat)}`);
+        }
+      }
+
+      // Attribute / style completions for real items
+      if (pName.includes("hoodie")) {
+        ["hoodie", "hoodies for men", "hoodies for women", "hoodies in new arrivals", "hoodies casual", "hoodies oversized"].forEach((term) => {
+          if (term.includes(q)) {
+            const dest = term.includes("men") ? "/men?search=hoodie" : term.includes("women") ? "/women?search=hoodie" : "/new-arrivals?search=hoodie";
+            addCandidate(term, dest);
+          }
+        });
+      }
+
+      if (pName.includes("peplum") || pName.includes("top")) {
+        ["peplum top", "peplum tops for women", "peplum top floral", "peplum top in new arrivals", "women's top's"].forEach((term) => {
+          if (term.includes(q)) {
+            addCandidate(term, "/women?search=peplum");
+          }
+        });
+      }
+
+      if (pName.includes("shirt")) {
+        ["shirts", "shirts for men", "men's casual shirt", "kid's shirt", "shirts in new arrivals"].forEach((term) => {
+          if (term.includes(q)) {
+            const dest = term.includes("kid") ? "/kids?search=shirt" : "/men?search=shirt";
+            addCandidate(term, dest);
+          }
+        });
+      }
+
+      if (pName.includes("kurti")) {
+        ["kurti's", "kurti for women", "red kurti", "kurti in new arrivals"].forEach((term) => {
+          if (term.includes(q)) {
+            addCandidate(term, "/women?search=kurti");
+          }
+        });
+      }
+
+      if (pName.includes("dress")) {
+        ["baby dress", "dresses for kids", "dresses for women", "dress in new arrivals"].forEach((term) => {
+          if (term.includes(q)) {
+            const dest = term.includes("baby") || term.includes("kid") ? "/kids?search=dress" : "/women?search=dress";
+            addCandidate(term, dest);
+          }
+        });
+      }
+    }
+
+    // Sort: prefix matches first, then substring matches
+    const prefixMatches = candidates.filter((c) => c.text.toLowerCase().startsWith(q));
+    const otherMatches = candidates.filter((c) => !c.text.toLowerCase().startsWith(q));
+
+    return [...prefixMatches, ...otherMatches].slice(0, 10);
   }, [query, products]);
 
-  const handleSelectProduct = (href: string) => {
+  // Default suggestions when query is empty
+  const defaultSuggestions = useMemo<SuggestionEntry[]>(() => {
+    const list: SuggestionEntry[] = [];
+    const seen = new Set<string>();
+
+    for (const p of products) {
+      if (!seen.has(p.name.toLowerCase())) {
+        seen.add(p.name.toLowerCase());
+        list.push({
+          id: `def-${p.id}`,
+          text: p.name,
+          href: `/product/${p.id}`,
+          isDirectProduct: true,
+        });
+      }
+      if (list.length >= 6) break;
+    }
+
+    if (list.length === 0) {
+      return [
+        { id: "d-1", text: "hoodies for men", href: "/men?search=hoodie" },
+        { id: "d-2", text: "women's peplum top", href: "/women?search=peplum" },
+        { id: "d-3", text: "kurti's", href: "/women?search=kurti" },
+        { id: "d-4", text: "men's casual shirt", href: "/men?search=shirt" },
+        { id: "d-5", text: "women's collection", href: "/women" },
+        { id: "d-6", text: "men's collection", href: "/men" },
+      ];
+    }
+
+    return list;
+  }, [products]);
+
+  const displayedList = query.trim() ? suggestions : defaultSuggestions;
+
+  const handleSelect = (href: string) => {
     onClose();
     navigateTo(href);
   };
 
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (selectedIndex >= 0 && displayedList[selectedIndex]) {
+      handleSelect(displayedList[selectedIndex].href);
+      return;
+    }
+
+    if (query.trim()) {
+      handleSelect(`/new-arrivals?search=${encodeURIComponent(query.trim())}`);
+    }
+  };
+
+  // Keyboard navigation: ArrowDown, ArrowUp, Enter, Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen) return;
+
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+
+      if (displayedList.length === 0) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev < displayedList.length - 1 ? prev + 1 : 0));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : displayedList.length - 1));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        handleSearchSubmit();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, displayedList, selectedIndex, query]);
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[250] overflow-y-auto overflow-x-hidden select-none">
-          {/* Backdrop */}
+        <div key="search-autocomplete-portal" className="fixed inset-0 z-[250] overflow-y-auto select-none">
+          {/* Obsidian Frosted Backdrop */}
           <motion.div
+            key="search-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.18 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/90 backdrop-blur-2xl"
+            className="fixed inset-0 bg-black/75 backdrop-blur-md"
           />
 
-          {/* Modal Container */}
-          <div className="relative min-h-screen px-4 sm:px-6 md:px-12 py-8 md:py-16 flex flex-col items-center">
+          {/* Search Stage Container (Centered Top) */}
+          <div className="relative w-full max-w-2xl mx-auto px-4 pt-14 sm:pt-20 pb-12 flex flex-col items-center">
             <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.98 }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full max-w-4xl bg-[#090909] border border-white/10 shadow-2xl relative my-auto overflow-hidden"
+              key="search-panel"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="w-full relative shadow-[0_20px_60px_rgba(0,0,0,0.85)]"
             >
-              {/* Top Search Input Bar */}
-              <div className="p-4 sm:p-6 border-b border-white/10 flex items-center gap-3 bg-black/50">
-                <Search className="w-5 h-5 text-[#c5a46d] shrink-0" />
+              {/* Search Bar Input */}
+              <form
+                onSubmit={handleSearchSubmit}
+                className={`w-full bg-[#0e0e0e] flex items-center border border-white/15 transition-all ${
+                  displayedList.length > 0 ? "rounded-t-md border-b-0" : "rounded-md"
+                }`}
+              >
+                {/* Search Icon */}
+                <div className="pl-4 pr-2 text-neutral-400 flex items-center justify-center">
+                  <Search className="w-4 h-4 text-neutral-400" />
+                </div>
+
+                {/* Input Text Box */}
                 <input
                   ref={inputRef}
                   type="text"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="SEARCH GARMENTS, FABRICS, product..."
-                  className="w-full bg-transparent text-white placeholder-neutral-500 font-mono text-xs sm:text-sm tracking-[0.2em] uppercase focus:outline-none"
+                  onChange={(e) => handleQueryChange(e.target.value)}
+                  placeholder="Search NOIR garments, hoodies, peplum, shirts..."
+                  className="flex-1 py-3.5 px-2 bg-transparent text-[15px] font-mono text-white placeholder-neutral-500 focus:outline-none font-normal"
                 />
+
+                {/* Clear 'X' Button */}
                 {query && (
                   <button
-                    onClick={() => setQuery("")}
-                    className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                    aria-label="Clear search"
+                    type="button"
+                    onClick={() => {
+                      handleQueryChange("");
+                      inputRef.current?.focus();
+                    }}
+                    className="p-1.5 text-neutral-400 hover:text-white transition-colors mr-1 cursor-pointer"
+                    aria-label="Clear query"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 )}
+
+                {/* Submit Action Button */}
                 <button
-                  onClick={onClose}
-                  className="p-1.5 sm:p-2 border border-white/10 hover:border-[#c5a46d] text-neutral-400 hover:text-white transition-colors cursor-pointer shrink-0 flex items-center justify-center"
-                  aria-label="Close search"
+                  type="submit"
+                  className="h-11 px-4 bg-[#1A3B8B] hover:bg-[#142e6d] text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 rounded-r-[3px] font-mono text-xs font-bold tracking-wider"
+                  title="Search"
                 >
-                  <X className="w-4 h-4" />
+                  <Search className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span className="hidden sm:inline">SEARCH</span>
                 </button>
-              </div>
+              </form>
 
-              {/* Body Content */}
-              <div className="p-6 sm:p-8 max-h-[65vh] overflow-y-auto">
-                {isLoading ? (
-                  <div className="py-20 flex flex-col items-center justify-center gap-3 text-neutral-400 font-mono text-xs uppercase tracking-widest">
-                    <Loader2 className="w-5 h-5 animate-spin text-[#c5a46d]" />
-                    <span>Querying Atelier Archive...</span>
-                  </div>
-                ) : !query.trim() ? (
-                  /* Empty Search State: Popular Recommendations */
-                  <div className="space-y-6">
-                    <div className="flex items-center gap-2 text-xs font-mono tracking-widest text-[#c5a46d] uppercase">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Popular Departments & Garments</span>
+              {/* Single-Column Autocomplete Suggestions Dropdown Panel */}
+              {displayedList.length > 0 ? (
+                <div className="w-full bg-[#0e0e0e] border-x border-b border-white/15 rounded-b-md shadow-2xl overflow-hidden divide-y divide-white/5">
+                  {/* Subtle heading when query is empty */}
+                  {!query.trim() && (
+                    <div className="px-4 py-2 bg-black/40 text-[10px] font-mono uppercase tracking-[0.2em] text-neutral-400 flex items-center justify-between">
+                      <span>Trending Searches</span>
+                      <span>Real Inventory</span>
                     </div>
+                  )}
 
-                    <div className="flex flex-wrap gap-2.5">
-                      {QUICK_CATEGORIES.map((item) => (
-                        <button
-                          key={item.label}
-                          onClick={() => {
-                            if (item.href) {
-                              handleSelectProduct(item.href);
-                            } else if (item.query) {
-                              setQuery(item.query);
-                            }
-                          }}
-                          className="px-4 py-2 bg-neutral-900 border border-white/10 hover:border-[#c5a46d] text-white hover:text-[#c5a46d] font-mono text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2"
-                        >
-                          <Tag className="w-3 h-3 text-[#c5a46d]" />
-                          <span>{item.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                  {displayedList.map((item, index) => {
+                    const isSelected = selectedIndex === index;
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => handleSelect(item.href)}
+                        onMouseEnter={() => setSelectedIndex(index)}
+                        className={`flex items-center justify-between px-4 py-3 transition-colors cursor-pointer ${
+                          isSelected
+                            ? "bg-white/[0.08] text-white pl-5"
+                            : "bg-transparent text-neutral-300 hover:bg-white/[0.04] hover:text-white"
+                        }`}
+                      >
+                        {/* Left magnifying glass + suggestion text */}
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <Search
+                            className={`w-4 h-4 shrink-0 transition-colors ${
+                              isSelected ? "text-[#c5a46d]" : "text-neutral-500"
+                            }`}
+                          />
+                          <div className="truncate">
+                            <SuggestionText text={item.text} query={query} />
+                          </div>
+                        </div>
 
-                    {products.length > 0 && (
-                      <div className="pt-6 border-t border-white/5 space-y-3">
-                        <span className="text-[11px] font-mono uppercase tracking-widest text-neutral-400 block">
-                          Featured Runway Highlights
-                        </span>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          {products.slice(0, 4).map((p) => (
-                            <div
-                              key={p.id}
-                              onClick={() => handleSelectProduct(`/product/${p.id}`)}
-                              className="group cursor-pointer space-y-2"
-                            >
-                              <div className="aspect-[3/4] bg-neutral-900 overflow-hidden border border-white/5 group-hover:border-[#c5a46d]/40 transition-colors">
-                                <img
-                                  src={p.thumbnail}
-                                  alt={p.name}
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                />
-                              </div>
-                              <div>
-                                <p className="text-[11px] font-bold font-display uppercase text-white group-hover:text-[#c5a46d] truncate">
-                                  {p.name}
-                                </p>
-                                <p className="text-[10px] font-mono text-[#c5a46d]">
-                                  {formatPrice(p.price)}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
+                        {/* Right Action Hint */}
+                        <div className="flex items-center gap-2 shrink-0 ml-4">
+                          <ArrowUpLeft
+                            className={`w-3.5 h-3.5 -rotate-90 transition-all ${
+                              isSelected ? "text-[#c5a46d] translate-x-0.5" : "text-neutral-600"
+                            }`}
+                          />
                         </div>
                       </div>
-                    )}
-                  </div>
-                ) : filteredProducts.length === 0 ? (
-                  /* No Results State */
-                  <div className="py-16 text-center space-y-4">
-                    <div className="w-12 h-12 rounded-full border border-white/10 bg-neutral-900 flex items-center justify-center mx-auto text-neutral-500">
-                      <Search className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-base font-bold font-display uppercase text-white">
-                        No Pieces Found For &ldquo;{query}&rdquo;
-                      </h4>
-                      <p className="text-xs font-mono text-neutral-400 mt-1 max-w-sm mx-auto">
-                        Verify your spelling or explore the primary departments.
-                      </p>
-                    </div>
-                    <div className="flex justify-center gap-3 pt-2">
-                      <button
-                        onClick={() => handleSelectProduct("/new-arrivals")}
-                        className="px-6 py-2.5 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-mono text-xs font-bold uppercase tracking-wider transition-all"
-                      >
-                        New Arrivals
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  /* Live Results Grid */
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between text-xs font-mono text-neutral-400 uppercase tracking-widest pb-2 border-b border-white/5">
-                      <span>Matches Found ({filteredProducts.length})</span>
-                      <span>Instant Archive Lookup</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                      {filteredProducts.map((product) => (
-                        <div
-                          key={product.id}
-                          onClick={() => handleSelectProduct(`/product/${product.id}`)}
-                          className="flex items-center gap-3.5 p-3 bg-neutral-950/80 border border-white/10 hover:border-[#c5a46d] transition-all group cursor-pointer"
-                        >
-                          <div className="w-16 h-20 bg-neutral-900 shrink-0 overflow-hidden border border-white/5">
-                            <img
-                              src={product.thumbnail}
-                              alt={product.name}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest block">
-                              {product.category}
-                            </span>
-                            <h5 className="text-xs font-bold uppercase font-display text-white group-hover:text-[#c5a46d] transition-colors truncate">
-                              {product.name}
-                            </h5>
-                            <span className="text-xs font-mono font-bold text-[#c5a46d] block">
-                              {formatPrice(product.price)}
-                            </span>
-                          </div>
-                          <ArrowRight className="w-4 h-4 text-neutral-500 group-hover:text-[#c5a46d] group-hover:translate-x-1 transition-all shrink-0" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer Bar */}
-              <div className="p-4 bg-black/60 border-t border-white/10 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest text-neutral-500">
-                <span>Direct Supabase Query System</span>
-                <Link
-                  href={`/new-arrivals?search=${encodeURIComponent(query)}`}
-                  onClick={onClose}
-                  className="text-[#c5a46d] hover:underline"
-                >
-                  View Full Results Grid →
-                </Link>
-              </div>
+                    );
+                  })}
+                </div>
+              ) : query.trim() ? (
+                /* No Suggestions Found */
+                <div className="w-full bg-[#0e0e0e] border-x border-b border-white/15 rounded-b-md p-6 text-center space-y-1 font-mono">
+                  <p className="text-xs text-neutral-300">
+                    No suggestions matching &ldquo;<span className="font-bold text-white">{query}</span>&rdquo;
+                  </p>
+                  <p className="text-[11px] text-neutral-500">
+                    Try searching for <span className="underline cursor-pointer text-[#c5a46d]" onClick={() => handleQueryChange("hoodie")}>hoodie</span>, <span className="underline cursor-pointer text-[#c5a46d]" onClick={() => handleQueryChange("peplum")}>peplum</span>, or <span className="underline cursor-pointer text-[#c5a46d]" onClick={() => handleQueryChange("shirt")}>shirt</span>
+                  </p>
+                </div>
+              ) : null}
             </motion.div>
           </div>
         </div>

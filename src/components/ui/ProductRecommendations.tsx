@@ -49,7 +49,7 @@ export default function ProductRecommendations({
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#1A3B8B]" />
           <h4 className="text-sm font-headline uppercase tracking-wider text-[#161616]">
-            Algorithmic Atelier Styling
+            Smart Styling Suggestions
           </h4>
         </div>
 
@@ -104,10 +104,10 @@ export default function ProductRecommendations({
           <div className="p-4 bg-white border border-[#E5E0D8] flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-[2px]">
             <div>
               <span className="text-[10px] font-mono tracking-widest text-[#1A3B8B] uppercase block font-semibold">
-                CURATED ATELIER ENSEMBLE
+                CURATED COLLECTION SET
               </span>
               <p className="text-xs text-[#4A4944] mt-0.5">
-                Engineered silhouette pairing with matching proportion, tech fabric, and color harmony.
+                Engineered product pairing with matching proportion, tech fabric, and color harmony.
               </p>
             </div>
 

@@ -18,7 +18,7 @@ if (typeof window !== "undefined") {
 }
 
 export default function TrendingShowcase() {
-  const { addToCart, setQuickViewProduct, isInWishlist, toggleWishlist } = useCart();
+  const { addToCart, isInWishlist, toggleWishlist } = useCart();
   const { setCursor, resetCursor } = useCursor();
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -156,7 +156,7 @@ export default function TrendingShowcase() {
             </div>
             <div>
               <h3 className="text-xl font-bold uppercase font-display text-white">
-                ATELIER product CURATING
+                FEATURED PRODUCTS CURATING
               </h3>
               <p className="text-xs text-neutral-400 font-mono mt-2 leading-relaxed">
                 Our trend curation engine is compiling real-time demand metrics. Browse our current department catalogs.
@@ -221,13 +221,6 @@ export default function TrendingShowcase() {
                       </span>
 
                       <div className="ml-auto pointer-events-auto flex items-center gap-1.5">
-                        <button
-                          onClick={() => setQuickViewProduct(product)}
-                          className="p-2 bg-black/75 hover:bg-[#c5a46d] hover:text-black text-white rounded-full border border-white/15 transition-all cursor-pointer shadow-lg"
-                          aria-label="Quick View"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
                         <button
                           onClick={() => toggleWishlist(product.id, product)}
                           className={`p-2 rounded-full border transition-all cursor-pointer shadow-lg ${isSaved

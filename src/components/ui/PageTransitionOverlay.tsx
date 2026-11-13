@@ -39,7 +39,7 @@ export default function PageTransitionOverlay() {
           <div className="relative z-10 flex items-center justify-between text-[10px] font-mono tracking-[0.3em] uppercase text-neutral-400">
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#c5a46d] animate-ping" />
-              <span className="text-[#c5a46d] font-bold">NOIR // ATELIER</span>
+              <span className="text-[#c5a46d] font-bold">NOIR // STUDIO</span>
             </div>
             <span className="hidden sm:inline text-neutral-500">AUTUMN-WINTER EDITION 07</span>
           </div>

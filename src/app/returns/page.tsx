@@ -70,7 +70,7 @@ export default function ReturnsPage() {
               Size Exchanges
             </h2>
             <p>
-              If a silhouette does not fit as desired, you can request an alternate size at no additional delivery fee, subject to stock availability in the catalog.
+              If a product does not fit as desired, you can request an alternate size at no additional delivery fee, subject to stock availability in the catalog.
             </p>
           </section>
         </div>

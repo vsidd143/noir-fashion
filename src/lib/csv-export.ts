@@ -1,5 +1,5 @@
 /**
- * NOIR Luxury Atelier - Enterprise CSV Export Suite
+ * NOIR Luxury Studio - Enterprise CSV Export Suite
  * High-performance, injection-safe CSV generator supporting:
  * - 14 specialized analytical and status-filtered CSV exports
  * - UTF-8 Byte Order Mark (BOM) for seamless Excel & Apple Numbers compatibility
@@ -129,7 +129,7 @@ export function exportOrdersCSV(
   });
 
   const metadataHeader = [
-    `# NOIR LUXURY ATELIER - ORDERS EXPORT`,
+    `# NOIR LUXURY STUDIO - ORDERS EXPORT`,
     `# Status Filter: ${statusFilter.toUpperCase()}`,
     `# Period: ${periodLabel}`,
     `# Total Records: ${filtered.length}`,
@@ -165,7 +165,7 @@ export function exportPeriodicSalesReportCSV(
   const avgOrderVal = delivered.length > 0 ? Math.round(totalDeliveredRev / delivered.length) : 0;
 
   const summarySection = [
-    `# NOIR LUXURY ATELIER - ${periodType.toUpperCase()} SALES & REVENUE REPORT`,
+    `# NOIR LUXURY STUDIO - ${periodType.toUpperCase()} SALES & REVENUE REPORT`,
     `# Reporting Cycle: ${periodLabel}`,
     `# Generated At: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`,
     `# Currency: INR (Indian Rupees)`,
@@ -174,7 +174,7 @@ export function exportPeriodicSalesReportCSV(
     `Total Orders Registered,${ordersInPeriod.length},All statuses within cycle`,
     `Delivered Orders,${delivered.length},Successfully fulfilled Cash on Delivery`,
     `Confirmed Orders,${confirmed.length},Verified by patron / admin`,
-    `Processing Orders,${processing.length},In atelier preparation`,
+    `Processing Orders,${processing.length},In order preparation`,
     `Shipped Orders,${shipped.length},In courier transit`,
     `Pending Orders,${pending.length},Awaiting patron confirmation`,
     `Cancelled Orders,${cancelled.length},Voided by patron or admin`,
@@ -228,7 +228,7 @@ export function exportRevenueAndProfitCSV(
   const delivered = ordersInPeriod.filter((o) => o.status === "delivered");
 
   const csv = [
-    `# NOIR LUXURY ATELIER - REVENUE & PROFIT AUDIT REPORT`,
+    `# NOIR LUXURY STUDIO - REVENUE & PROFIT AUDIT REPORT`,
     `# Cycle: ${periodLabel}`,
     `# Generated At: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`,
     "",
@@ -249,7 +249,7 @@ export function exportRevenueAndProfitCSV(
     `Luxury Boxes & Packaging,${profit.operatingExpensesByCategory.packaging},${profit.totalOperatingExpenses > 0 ? ((profit.operatingExpensesByCategory.packaging / profit.totalOperatingExpenses) * 100).toFixed(1) : "0.0"}%`,
     `Payment & COD Handling Fees,${profit.operatingExpensesByCategory.payment_gateway},${profit.totalOperatingExpenses > 0 ? ((profit.operatingExpensesByCategory.payment_gateway / profit.totalOperatingExpenses) * 100).toFixed(1) : "0.0"}%`,
     `Marketing & Brand Campaigns,${profit.operatingExpensesByCategory.marketing},${profit.totalOperatingExpenses > 0 ? ((profit.operatingExpensesByCategory.marketing / profit.totalOperatingExpenses) * 100).toFixed(1) : "0.0"}%`,
-    `Atelier Overhead & Operations,${profit.operatingExpensesByCategory.operations},${profit.totalOperatingExpenses > 0 ? ((profit.operatingExpensesByCategory.operations / profit.totalOperatingExpenses) * 100).toFixed(1) : "0.0"}%`,
+    `Studio Overhead & Operations,${profit.operatingExpensesByCategory.operations},${profit.totalOperatingExpenses > 0 ? ((profit.operatingExpensesByCategory.operations / profit.totalOperatingExpenses) * 100).toFixed(1) : "0.0"}%`,
     `Artisan Salaries & Craftsmen,${profit.operatingExpensesByCategory.salaries},${profit.totalOperatingExpenses > 0 ? ((profit.operatingExpensesByCategory.salaries / profit.totalOperatingExpenses) * 100).toFixed(1) : "0.0"}%`,
     `Miscellaneous Operating Costs,${profit.operatingExpensesByCategory.other},${profit.totalOperatingExpenses > 0 ? ((profit.operatingExpensesByCategory.other / profit.totalOperatingExpenses) * 100).toFixed(1) : "0.0"}%`,
     "",
@@ -282,7 +282,7 @@ export function exportCustomerLossCSV(
   const cancelled = ordersInPeriod.filter((o) => o.status === "cancelled");
 
   const csv = [
-    `# NOIR LUXURY ATELIER - CUSTOMER LOSS & CANCELLATION ANALYSIS`,
+    `# NOIR LUXURY STUDIO - CUSTOMER LOSS & CANCELLATION ANALYSIS`,
     `# Reporting Cycle: ${periodLabel}`,
     `# Generated At: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`,
     "",
@@ -302,7 +302,7 @@ export function exportCustomerLossCSV(
     ),
     "",
     "PRODUCT-WISE CANCELLATION FREQUENCY",
-    "Product Silhouette,Cancelled Units,Lost Potential Value (INR),Cancellation Rate",
+    "Product,Cancelled Units,Lost Potential Value (INR),Cancellation Rate",
     ...loss.productWiseCancellations.map((p) =>
       [
         escapeCSVCell(p.productName),
@@ -352,7 +352,7 @@ export function exportProductPerformanceCSV(
   }[]
 ) {
   const headers = [
-    "Product Silhouette Name",
+    "Product Name",
     "Retail Selling Price (INR)",
     "Delivered Units Sold",
     "Delivered Gross Revenue (INR)",
@@ -378,7 +378,7 @@ export function exportProductPerformanceCSV(
   ]);
 
   const csv = [
-    `# NOIR LUXURY ATELIER - PRODUCT PERFORMANCE & RUNWAY PROFITABILITY`,
+    `# NOIR LUXURY STUDIO - PRODUCT PERFORMANCE & RUNWAY PROFITABILITY`,
     `# Cycle: ${periodLabel}`,
     `# Generated At: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`,
     "",
@@ -426,7 +426,7 @@ export function exportCustomerInsightsCSV(
   ]);
 
   const csv = [
-    `# NOIR LUXURY ATELIER - CLIENT COHORT & LIFETIME VALUE REPORT`,
+    `# NOIR LUXURY STUDIO - CLIENT COHORT & LIFETIME VALUE REPORT`,
     `# Cycle: ${periodLabel}`,
     `# Generated At: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`,
     "",
