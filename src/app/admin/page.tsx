@@ -56,6 +56,9 @@ import {
   Filter,
   Check,
   Eye,
+  EyeOff,
+  KeyRound,
+  ShieldCheck,
   ChevronDown,
   Clock,
   CreditCard,
@@ -75,7 +78,8 @@ type AdminSection =
   | "inventory"
   | "coupons"
   | "content"
-  | "settings";
+  | "settings"
+  | "create-admin";
 
 type OrderItem = {
   id: string;
@@ -164,6 +168,15 @@ export default function AdminDashboard() {
 
   const [authStatus, setAuthStatus] = useState<"checking" | "authorized" | "unauthorized">("checking");
   const [unauthorizedReason, setUnauthorizedReason] = useState<string>("");
+  const [currentAdminEmail, setCurrentAdminEmail] = useState<string>("");
+
+  // Create Admin Section State
+  const [createAdminEmail, setCreateAdminEmail] = useState("");
+  const [createAdminPassword, setCreateAdminPassword] = useState("");
+  const [createAdminConfirmPassword, setCreateAdminConfirmPassword] = useState("");
+  const [createAdminFullName, setCreateAdminFullName] = useState("");
+  const [showCreateAdminPassword, setShowCreateAdminPassword] = useState(false);
+  const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -179,7 +192,6 @@ export default function AdminDashboard() {
         }
 
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "vsidd143@gmail.com";
-        const isMaster = (user.email || "").toLowerCase() === adminEmail.toLowerCase();
 
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
@@ -211,6 +223,7 @@ export default function AdminDashboard() {
         }
 
         if (isMounted) {
+          setCurrentAdminEmail(user.email || adminEmail);
           setAuthStatus("authorized");
         }
       } catch {
@@ -830,6 +843,98 @@ export default function AdminDashboard() {
   };
 
   // -------------------------------------------------------------
+  // ADMINISTRATOR CREATION & ROLE MANAGEMENT
+  // -------------------------------------------------------------
+  const handleCreateAdminSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createAdminEmail || !createAdminEmail.includes("@")) {
+      showNotification("error", "Please provide a valid email address.");
+      return;
+    }
+    if (!createAdminPassword || createAdminPassword.length < 6) {
+      showNotification("error", "Password must be at least 6 characters.");
+      return;
+    }
+    if (createAdminPassword !== createAdminConfirmPassword) {
+      showNotification("error", "Passwords do not match.");
+      return;
+    }
+
+    setIsSubmittingAdmin(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch("/api/admin/create-admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          email: createAdminEmail.trim().toLowerCase(),
+          password: createAdminPassword.trim(),
+          fullName: createAdminFullName.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to create administrator");
+      }
+
+      if (data.profile) {
+        setUsersList((prev) => {
+          const exists = prev.some((u) => u.email.toLowerCase() === data.profile.email.toLowerCase());
+          if (exists) {
+            return prev.map((u) =>
+              u.email.toLowerCase() === data.profile.email.toLowerCase()
+                ? { ...u, ...data.profile, role: "admin", is_blocked: false }
+                : u
+            );
+          }
+          return [data.profile, ...prev];
+        });
+      }
+
+      showNotification("success", data.message || "Administrator created and synchronized to database!");
+      setCreateAdminEmail("");
+      setCreateAdminPassword("");
+      setCreateAdminConfirmPassword("");
+      setCreateAdminFullName("");
+    } catch (err: unknown) {
+      showNotification("error", err instanceof Error ? err.message : "Failed to create administrator.");
+    } finally {
+      setIsSubmittingAdmin(false);
+    }
+  };
+
+  const handleDemoteAdmin = async (userId: string) => {
+    try {
+      const target = usersList.find((u) => u.id === userId);
+      const { error } = await supabase
+        .from("profiles")
+        .update({ role: "customer", is_blocked: false })
+        .eq("id", userId);
+
+      if (error) {
+        showNotification("error", `Failed to demote administrator: ${error.message}`);
+        return;
+      }
+
+      setUsersList((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role: "customer" } : u))
+      );
+      showNotification(
+        "success",
+        `${target?.email || "User"} demoted to customer role in database.`
+      );
+    } catch (err: unknown) {
+      showNotification("error", err instanceof Error ? err.message : "Demote action failed.");
+    }
+  };
+
+  // -------------------------------------------------------------
   // CATEGORIES & TYPES & COLLECTIONS CRUD
   // -------------------------------------------------------------
   const handleSaveCategory = async (e: React.FormEvent) => {
@@ -1202,6 +1307,7 @@ export default function AdminDashboard() {
     { id: "product-types", label: "Product Types", icon: FolderTree, badge: productTypesList.length },
     { id: "orders", label: "Customer Orders", icon: ShoppingBag, badge: ordersList.length },
     { id: "customers", label: "Customers", icon: Users, badge: usersList.length },
+    { id: "create-admin", label: "Create Admin", icon: ShieldCheck, badge: usersList.filter((u) => u.role === "admin").length },
     { id: "inventory", label: "Inventory", icon: Boxes },
     { id: "coupons", label: "Coupons", icon: Tag, badge: couponsList.length },
     { id: "content", label: "Website Content", icon: Megaphone },
@@ -1317,7 +1423,7 @@ export default function AdminDashboard() {
             </div>
             <div className="mt-3 flex items-center gap-2 text-[10px] font-mono text-neutral-400">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="truncate">Connected: {process.env.NEXT_PUBLIC_ADMIN_EMAIL || "vsidd143@gmail.com"}</span>
+              <span className="truncate">Connected: {currentAdminEmail || process.env.NEXT_PUBLIC_ADMIN_EMAIL || "vsidd143@gmail.com"}</span>
             </div>
           </div>
 
@@ -1657,6 +1763,31 @@ export default function AdminDashboard() {
                 >
                   <BarChart3 className="w-4 h-4" />
                   <span>Open Analytics BI Hub &rarr;</span>
+                </button>
+              </div>
+
+              {/* Studio Access & Administrator Management Banner */}
+              <div className="p-6 bg-gradient-to-r from-neutral-950 via-[#0a0a0a] to-neutral-950 border border-[#c5a46d]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <ShieldCheck className="w-4 h-4 text-[#c5a46d]" />
+                    <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#c5a46d] font-bold">
+                      ADMINISTRATOR ACCESS & CREDENTIALS
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-bold text-white uppercase font-display">
+                    Create Administrator & Grant Database Access
+                  </h3>
+                  <p className="text-xs text-neutral-400 mt-0.5 font-mono">
+                    Add new administrator email and password. Details automatically synchronize to Supabase database with full master privileges.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveSection("create-admin")}
+                  className="px-5 py-3 bg-[#c5a46d] hover:bg-[#d4b57e] text-black font-extrabold text-xs font-mono uppercase tracking-widest transition-all flex items-center gap-2 cursor-pointer shrink-0 shadow-lg shadow-[#c5a46d]/20"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  <span>Create Admin &rarr;</span>
                 </button>
               </div>
 
@@ -3192,6 +3323,206 @@ export default function AdminDashboard() {
                 >
                   Save Settings
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* ===================================================== */}
+          {/* 13. CREATE ADMINISTRATOR & ACCESS CONTROL */}
+          {/* ===================================================== */}
+          {activeSection === "create-admin" && (
+            <div className="space-y-8 max-w-5xl">
+              <div>
+                <span className="text-[10px] font-mono tracking-[0.3em] uppercase text-[#c5a46d] block mb-1">
+                  SECURITY GATEWAY // ACCESS PROVISIONING
+                </span>
+                <h2 className="text-3xl font-black uppercase tracking-tight font-display text-white">
+                  Create Administrator
+                </h2>
+                <p className="text-xs font-mono text-neutral-400 mt-1">
+                  Enter the email address and password of the new administrator. Credentials and roles synchronize automatically with your Supabase database.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Form Column (7 cols) */}
+                <div className="lg:col-span-7 bg-[#0a0a0a] border border-white/10 p-6 sm:p-8 space-y-6 font-mono text-xs shadow-2xl">
+                  <div className="flex items-center gap-2.5 pb-4 border-b border-white/10">
+                    <div className="p-2 bg-[#c5a46d]/10 border border-[#c5a46d]/30 text-[#c5a46d] rounded">
+                      <ShieldCheck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider font-display">
+                        New Administrator Credentials
+                      </h3>
+                      <p className="text-[11px] text-neutral-400">
+                        Create credentials and grant master access to the studio.
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleCreateAdminSubmit} className="space-y-5">
+                    {/* Admin Email */}
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1.5 font-bold">
+                        Administrator Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="e.g. successor@noir-atelier.com"
+                        value={createAdminEmail}
+                        onChange={(e) => setCreateAdminEmail(e.target.value)}
+                        className="w-full bg-black border border-white/15 px-3.5 py-2.5 text-white placeholder-neutral-600 focus:border-[#c5a46d] focus:outline-none transition-colors"
+                      />
+                    </div>
+
+                    {/* Full Name */}
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1.5 font-bold">
+                        Full Name / Alias (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Julian Vance"
+                        value={createAdminFullName}
+                        onChange={(e) => setCreateAdminFullName(e.target.value)}
+                        className="w-full bg-black border border-white/15 px-3.5 py-2.5 text-white placeholder-neutral-600 focus:border-[#c5a46d] focus:outline-none transition-colors"
+                      />
+                    </div>
+
+                    {/* Password Fields */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1.5 font-bold">
+                          Password (min 6 chars) *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showCreateAdminPassword ? "text" : "password"}
+                            required
+                            placeholder="••••••••"
+                            value={createAdminPassword}
+                            onChange={(e) => setCreateAdminPassword(e.target.value)}
+                            className="w-full bg-black border border-white/15 px-3.5 py-2.5 pr-10 text-white placeholder-neutral-600 focus:border-[#c5a46d] focus:outline-none transition-colors"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowCreateAdminPassword(!showCreateAdminPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white cursor-pointer"
+                          >
+                            {showCreateAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1.5 font-bold">
+                          Confirm Password *
+                        </label>
+                        <input
+                          type={showCreateAdminPassword ? "text" : "password"}
+                          required
+                          placeholder="••••••••"
+                          value={createAdminConfirmPassword}
+                          onChange={(e) => setCreateAdminConfirmPassword(e.target.value)}
+                          className="w-full bg-black border border-white/15 px-3.5 py-2.5 text-white placeholder-neutral-600 focus:border-[#c5a46d] focus:outline-none transition-colors"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Database Access Notice Box */}
+                    <div className="p-4 bg-black border border-[#c5a46d]/30 space-y-2">
+                      <div className="flex items-center gap-2 text-[#c5a46d] font-bold text-[11px] uppercase tracking-wider">
+                        <Check className="w-4 h-4" />
+                        <span>Database Synchronization Active</span>
+                      </div>
+                      <ul className="text-[10px] text-neutral-400 space-y-1 list-disc list-inside">
+                        <li>Directly updates Supabase Auth and sets profile role to <span className="text-[#c5a46d] font-bold">&apos;admin&apos;</span>.</li>
+                        <li>The new administrator can immediately log in at <span className="text-white underline">/admin/login</span>.</li>
+                        <li>Grants full master privileges: Inventory, Orders, Stock, and Revenue reports.</li>
+                      </ul>
+                    </div>
+
+                    {/* Action Button */}
+                    <button
+                      type="submit"
+                      disabled={isSubmittingAdmin}
+                      className="w-full py-3.5 bg-[#c5a46d] hover:bg-[#d6b77e] text-black font-extrabold text-xs uppercase tracking-[0.2em] font-mono transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#c5a46d]/20 disabled:opacity-50"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>{isSubmittingAdmin ? "Synchronizing with Database..." : "Create & Grant Administrator Access"}</span>
+                    </button>
+                  </form>
+                </div>
+
+                {/* Right Column: Active Administrators List (5 cols) */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="p-5 bg-[#0a0a0a] border border-white/10 space-y-4 font-mono text-xs">
+                    <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                      <div className="flex items-center gap-2 text-white font-bold uppercase tracking-wider text-[11px]">
+                        <Users className="w-4 h-4 text-[#c5a46d]" />
+                        <span>Active Administrators ({usersList.filter((u) => u.role === "admin").length})</span>
+                      </div>
+                      <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 uppercase font-bold">
+                        Database Live
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {usersList
+                        .filter((u) => u.role === "admin")
+                        .map((adminUser) => {
+                          const isSelf =
+                            currentAdminEmail &&
+                            adminUser.email &&
+                            currentAdminEmail.toLowerCase() === adminUser.email.toLowerCase();
+
+                          return (
+                            <div
+                              key={adminUser.id}
+                              className="p-3 bg-black border border-white/10 space-y-2"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-white text-xs">
+                                      {adminUser.full_name || "Administrator"}
+                                    </span>
+                                    {isSelf && (
+                                      <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded font-bold">
+                                        YOU
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[11px] text-neutral-400 font-mono block mt-0.5">
+                                    {adminUser.email}
+                                  </span>
+                                </div>
+                                <span className="text-[9px] font-bold text-[#c5a46d] bg-[#c5a46d]/15 border border-[#c5a46d]/30 px-2 py-0.5 uppercase shrink-0">
+                                  MASTER
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-[10px] text-neutral-500 pt-2 border-t border-white/5">
+                                <span>Role: profiles.role = &apos;admin&apos;</span>
+                                {!isSelf && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDemoteAdmin(adminUser.id)}
+                                    className="text-neutral-400 hover:text-amber-400 underline cursor-pointer"
+                                    title="Demote this administrator to customer"
+                                  >
+                                    Revoke Access
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
